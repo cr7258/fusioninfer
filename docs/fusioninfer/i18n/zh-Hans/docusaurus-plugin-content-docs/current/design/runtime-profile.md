@@ -208,7 +208,7 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - backend adapter 必须支持模板中声明的镜像和入口参数。
 - 模板不能声明 backend adapter 保留的 executor、地址、rank、`nnodes` 或 headless 参数。
 - 模板镜像必须使用 OCI digest 固定。
-- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 在 v1 中不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
+- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
 
 ## Status {#status}
 

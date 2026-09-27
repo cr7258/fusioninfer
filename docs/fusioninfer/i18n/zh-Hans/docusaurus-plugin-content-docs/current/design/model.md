@@ -69,12 +69,11 @@ type ModelSource struct {
 
 ### 模型来源 {#model-sources}
 
-`source.uri` 必填，v1 支持以下来源：
+`source.uri` 必填，支持以下来源：
 
 - `hf://<repository>`：`revision` 必填，并使用完整 commit SHA；`digest` 可选。
 - `s3://<bucket>/<prefix>`：`digest` 必填。
 - `oci://<artifact>@sha256:<digest>`：URI 必须包含 descriptor digest；`source.digest` 可选。
-- `pvc://<claim>/<subpath>`：只允许用于 Namespaced `Model`，`digest` 必填，不允许设置 `credentialsRef`。
 
 `source.digest` 使用 `sha256:<64 个小写十六进制字符>` 格式。URI scheme 必须为小写，不允许 query、fragment 或 `.`、`..` 路径段。
 
@@ -85,25 +84,23 @@ type ModelSource struct {
 - `hf://`：接受 `Opaque` Secret，要求包含 `HF_TOKEN`。
 - `s3://`：接受 `Opaque` Secret，使用 AWS SDK 标准键名，同时支持 AWS S3 和 S3-compatible 存储。
 - `oci://`：接受 `kubernetes.io/dockerconfigjson` Secret，要求包含 `.dockerconfigjson`。
-- `pvc://`：不允许设置 `credentialsRef`。
 
 - Namespaced `Model`：在该 Model 所在 Namespace 中解析 Secret。
 - `ClusterModel`：在每个消费它的 `InferenceDeployment` Namespace 中独立解析同名 Secret。不同团队可以提供各自的凭据，Cluster-scoped 对象不会跨 Namespace 读取 Secret，也不会产生一份全局认证状态。
 
 ### LoRA 制品语义 {#lora-artifact-semantics}
 
-LoRA Model 使用 `source` 声明 adapter 文件，并使用 `lora.baseModelRef` 声明对应的 Base Model。`baseModelRef` 必须是显式的 `kind + name` 引用，v1 不允许 LoRA 引用另一个 LoRA。
+LoRA Model 使用 `source` 声明 adapter 文件，并使用 `lora.baseModelRef` 声明对应的 Base Model。`baseModelRef` 必须是显式的 `kind + name` 引用。
 
-LoRA Model 通过 `InferenceDeployment.spec.lora[]` 绑定到推理服务。制品中的 `baseModelRef` 表示兼容性约束，Deployment 的 `modelRef` 表示实际运行的 Base Model；Controller 只有在两者解析到相同 Kind、名称和 UID 时才加载 LoRA。加载模式、目标逻辑副本和逐角色状态由消费它的 InferenceDeployment 与 RuntimeProfile 管理。
+LoRA Model 通过 `InferenceDeployment.spec.lora[]` 绑定到推理服务。`baseModelRef` 声明这个 LoRA 只能叠加在哪个 Base Model 上，Deployment 的 `modelRef` 决定实际运行哪个 Base Model。只有两者指向同一个对象（Kind、名称和 UID 都相同）时，InferenceDeployment 控制器才会加载这个 LoRA。
 
 ### 默认值与校验 {#defaults-and-validation}
 
 - `spec.source` 必填。
 - `revision`、`digest` 和 `credentialsRef` 必须符合对应 URI scheme 的约束。
 - `lora` 存在时，`baseModelRef.kind` 和 `baseModelRef.name` 必填。
-- `ClusterModel` 不允许使用 `pvc://`。
 - Cluster-scoped LoRA 不能引用 Namespaced `Model`。
-- `Model.spec` 和 `ClusterModel.spec` 在 v1 中不可变。修改来源、版本、凭据或 `baseModelRef` 时需要创建新对象。
+- `Model.spec` 和 `ClusterModel.spec` 不可变。修改来源、版本、凭据或 `baseModelRef` 时需要创建新对象。
 
 ## Status {#status}
 
@@ -127,22 +124,6 @@ spec:
     revision: 0123456789abcdef0123456789abcdef01234567
     credentialsRef:
       name: huggingface-token
-```
-
-### Model：PVC Base Model {#model-pvc-base-model}
-
-该对象及 `qwen3-weights` PVC 都位于 `team-a`，`digest` 用于校验 PVC 中的模型内容。
-
-```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: Model
-metadata:
-  name: qwen3-8b-pvc-r1
-  namespace: team-a
-spec:
-  source:
-    uri: pvc://qwen3-weights/models/qwen3-8b
-    digest: sha256:7f3c9a1e4b2d8f605a7c3e9d1b4f2860c5a8e2d7f1b3096c4e8a5d2f7b1c903e
 ```
 
 ### Model：S3 Base Model {#model-s3-base-model}

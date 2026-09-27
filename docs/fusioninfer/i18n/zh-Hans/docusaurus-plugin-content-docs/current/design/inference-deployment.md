@@ -169,11 +169,9 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 
 `eager` 预热 Job 不申请或预留 GPU。模型已预热但 GPU 不可用时，工作负载可以保持 Pending；新版本失败不会提前删除仍在服务的上一版本。
 
-`pvc://` 来源也必须先复制到不可变节点缓存。引擎只读挂载缓存副本，不直接使用可变的源 PVC 内容。
-
 ### Endpoint {#endpoint}
 
-`endpoint` 在 v1 中必填。Controller 根据该字段创建 Endpoint Picker、InferencePool 和 HTTPRoute：
+`endpoint` 必填。Controller 根据该字段创建 Endpoint Picker、InferencePool 和 HTTPRoute：
 
 - `gatewayRef.name` 指定 HTTPRoute 连接的 Gateway。
 - `gatewayRef.namespace` 省略时使用 `InferenceDeployment` 所在 Namespace。

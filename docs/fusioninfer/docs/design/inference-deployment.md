@@ -169,11 +169,9 @@ Both modes use the same content-addressed node cache and derive an immutable cac
 
 `eager` warm-up Jobs do not request or reserve GPUs. If the model is warm but GPUs are unavailable, the workload can remain Pending; a failed new version does not prematurely delete the previous version that is still serving.
 
-`pvc://` sources must also be copied to the immutable node cache first. The engine mounts the cached copy read-only and does not use the mutable source PVC contents directly.
-
 ### Endpoint {#endpoint}
 
-`endpoint` is required in v1. The Controller creates Endpoint Picker, InferencePool, and HTTPRoute resources from this field:
+`endpoint` is required. The Controller creates Endpoint Picker, InferencePool, and HTTPRoute resources from this field:
 
 - `gatewayRef.name` specifies the Gateway to which the HTTPRoute attaches.
 - When `gatewayRef.namespace` is omitted, it uses the `InferenceDeployment`'s Namespace.

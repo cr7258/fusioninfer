@@ -208,7 +208,7 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 - The backend adapter must support the image and entrypoint arguments declared in the template.
 - The template cannot declare executor, address, rank, `nnodes`, or headless parameters reserved by the backend adapter.
 - The template image must be pinned by OCI digest.
-- `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable in v1. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
+- `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
 
 ## Status {#status}
 

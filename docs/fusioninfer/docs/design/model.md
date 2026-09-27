@@ -69,12 +69,11 @@ References do not provide a default Kind, Namespace fallback, or fallback to a r
 
 ### Model sources {#model-sources}
 
-`source.uri` is required. v1 supports the following sources:
+`source.uri` is required. The following sources are supported:
 
 - `hf://<repository>`: `revision` is required and must be a full commit SHA; `digest` is optional.
 - `s3://<bucket>/<prefix>`: `digest` is required.
 - `oci://<artifact>@sha256:<digest>`: the URI must include the descriptor digest; `source.digest` is optional.
-- `pvc://<claim>/<subpath>`: permitted only for a Namespaced `Model`; `digest` is required, and `credentialsRef` is not allowed.
 
 `source.digest` uses the format `sha256:<64 lowercase hexadecimal characters>`. The URI scheme must be lowercase. Queries, fragments, and `.` or `..` path segments are not allowed.
 
@@ -85,25 +84,23 @@ References do not provide a default Kind, Namespace fallback, or fallback to a r
 - `hf://`: accepts an `Opaque` Secret that must contain `HF_TOKEN`.
 - `s3://`: accepts an `Opaque` Secret, uses standard AWS SDK key names, and supports both AWS S3 and S3-compatible storage.
 - `oci://`: accepts a `kubernetes.io/dockerconfigjson` Secret that must contain `.dockerconfigjson`.
-- `pvc://`: does not allow `credentialsRef`.
 
 - Namespaced `Model`: the Secret is resolved in the Model's Namespace.
 - `ClusterModel`: a Secret with the same name is resolved independently in the Namespace of each `InferenceDeployment` that consumes it. Different teams can provide their own credentials; the cluster-scoped object does not read Secrets across Namespaces or create a single global authentication state.
 
 ### LoRA artifact semantics {#lora-artifact-semantics}
 
-A LoRA Model uses `source` to declare its adapter files and `lora.baseModelRef` to declare the corresponding Base Model. `baseModelRef` must be an explicit `kind + name` reference. v1 does not allow a LoRA to reference another LoRA.
+A LoRA Model uses `source` to declare its adapter files and `lora.baseModelRef` to declare the corresponding Base Model. `baseModelRef` must be an explicit `kind + name` reference.
 
-A LoRA Model is bound to an inference service through `InferenceDeployment.spec.lora[]`. The artifact's `baseModelRef` represents a compatibility constraint, while the Deployment's `modelRef` represents the Base Model that actually runs. The Controller loads the LoRA only when both references resolve to the same Kind, name, and UID. The consuming InferenceDeployment and RuntimeProfile manage the loading mode, target logical replicas, and per-role status.
+A LoRA Model is bound to an inference service through `InferenceDeployment.spec.lora[]`. `baseModelRef` declares which Base Model the LoRA can be applied to, while the Deployment's `modelRef` determines which Base Model actually runs. The InferenceDeployment controller loads the LoRA only when both references resolve to the same object, with the same Kind, name, and UID.
 
 ### Defaults and validation {#defaults-and-validation}
 
 - `spec.source` is required.
 - `revision`, `digest`, and `credentialsRef` must satisfy the constraints for the corresponding URI scheme.
 - When `lora` is present, `baseModelRef.kind` and `baseModelRef.name` are required.
-- `ClusterModel` does not allow `pvc://`.
 - A cluster-scoped LoRA cannot reference a Namespaced `Model`.
-- `Model.spec` and `ClusterModel.spec` are immutable in v1. Changing the source, version, credentials, or `baseModelRef` requires creating a new object.
+- `Model.spec` and `ClusterModel.spec` are immutable. Changing the source, version, credentials, or `baseModelRef` requires creating a new object.
 
 ## Status {#status}
 
@@ -127,22 +124,6 @@ spec:
     revision: 0123456789abcdef0123456789abcdef01234567
     credentialsRef:
       name: huggingface-token
-```
-
-### Model: PVC Base Model {#model-pvc-base-model}
-
-This object and the `qwen3-weights` PVC both reside in `team-a`. `digest` verifies the model content in the PVC.
-
-```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: Model
-metadata:
-  name: qwen3-8b-pvc-r1
-  namespace: team-a
-spec:
-  source:
-    uri: pvc://qwen3-weights/models/qwen3-8b
-    digest: sha256:7f3c9a1e4b2d8f605a7c3e9d1b4f2860c5a8e2d7f1b3096c4e8a5d2f7b1c903e
 ```
 
 ### Model: S3 Base Model {#model-s3-base-model}
