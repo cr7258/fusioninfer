@@ -33,20 +33,24 @@ spec:
 `Model` 与 `ClusterModel` 共享以下 Go 接口：
 
 ```go
+// ModelSpec 声明一个不可变的模型制品，由 Model 与 ClusterModel 共用。
 type ModelSpec struct {
     Source ModelSource      `json:"source"`
     LoRA   *LoRAArtifactSpec `json:"lora,omitempty"`
 }
 
+// LoRAArtifactSpec 只在 LoRA 制品上设置，声明这个 LoRA 可以叠加在哪个 Base Model 上。
 type LoRAArtifactSpec struct {
     BaseModelRef ModelReference `json:"baseModelRef"`
 }
 
+// ModelReference 通过 kind 和 name 引用 Model 或 ClusterModel。
 type ModelReference struct {
     Kind string `json:"kind"`
     Name string `json:"name"`
 }
 
+// ModelSource 声明制品的存储位置、版本标识，以及访问它时使用的 Secret。
 type ModelSource struct {
     URI            string                        `json:"uri"`
     Revision       string                        `json:"revision,omitempty"`
@@ -54,8 +58,6 @@ type ModelSource struct {
     CredentialsRef *corev1.LocalObjectReference `json:"credentialsRef,omitempty"`
 }
 ```
-
-`lora` 省略时表示 Base Model，存在时表示 LoRA。`revision` 和 `digest` 是否必填由 `uri` 的 scheme 决定。
 
 ### 作用域与引用 {#scope-and-references}
 
@@ -65,28 +67,36 @@ type ModelSource struct {
 - Cluster-scoped LoRA `ClusterModel` 只能引用 `ClusterModel`。
 - `baseModelRef` 必须指向 Base Model，不能指向另一个 LoRA。
 
-引用不提供默认 Kind、Namespace fallback 或同名资源回退。
-
 ### 模型来源 {#model-sources}
 
 `source.uri` 必填，支持以下来源：
 
-- `hf://<repository>`：`revision` 必填，并使用完整 commit SHA；`digest` 可选。
-- `s3://<bucket>/<prefix>`：`digest` 必填。
-- `oci://<artifact>@sha256:<digest>`：URI 必须包含 descriptor digest；`source.digest` 可选。
+| 来源 | URI 格式 | 版本要求 | 示例 |
+| --- | --- | --- | --- |
+| Hugging Face | `hf://<repository>` | `revision` 必填，使用完整 commit SHA；`digest` 可选 | `hf://Qwen/Qwen3-8B` |
+| S3 | `s3://<bucket>/<prefix>` | `digest` 必填 | `s3://team-a-models/base/qwen3-8b` |
+| OCI | `oci://<artifact>@sha256:<digest>` | URI 必须包含 descriptor digest；`source.digest` 可选 | `oci://registry.example.com/models/qwen3-8b@sha256:9d2e…` |
 
-`source.digest` 使用 `sha256:<64 个小写十六进制字符>` 格式。URI scheme 必须为小写，不允许 query、fragment 或 `.`、`..` 路径段。
+`source.digest` 使用 `sha256:<64 个小写十六进制字符>` 格式。
 
-### 凭据契约 {#credentials-contract}
+### 访问凭据 {#access-credentials}
 
 `source.credentialsRef` 只包含 Secret 名称，不允许指定 Namespace。省略时使用平台配置的 workload identity 或匿名访问。
 
-- `hf://`：接受 `Opaque` Secret，要求包含 `HF_TOKEN`。
-- `s3://`：接受 `Opaque` Secret，使用 AWS SDK 标准键名，同时支持 AWS S3 和 S3-compatible 存储。
-- `oci://`：接受 `kubernetes.io/dockerconfigjson` Secret，要求包含 `.dockerconfigjson`。
+| 来源 | Secret 类型 | 要求 |
+| --- | --- | --- |
+| `hf://` | `Opaque` | 包含 `HF_TOKEN` |
+| `s3://` | `Opaque` | 使用 AWS SDK 标准键名，支持 AWS S3 和 S3-compatible 存储 |
+| `oci://` | `kubernetes.io/dockerconfigjson` | 包含 `.dockerconfigjson` |
 
-- Namespaced `Model`：在该 Model 所在 Namespace 中解析 Secret。
-- `ClusterModel`：在每个消费它的 `InferenceDeployment` Namespace 中独立解析同名 Secret。不同团队可以提供各自的凭据，Cluster-scoped 对象不会跨 Namespace 读取 Secret，也不会产生一份全局认证状态。
+Secret 的解析位置取决于资源作用域：
+
+| 资源 | Secret 解析位置 |
+| --- | --- |
+| Namespaced `Model` | 该 Model 所在的 Namespace |
+| `ClusterModel` | 每个消费它的 `InferenceDeployment` 所在的 Namespace，各自独立解析同名 Secret |
+
+不同团队可以提供各自的凭据，Cluster-scoped 对象不会跨 Namespace 读取 Secret，也不会产生一份全局认证状态。
 
 ### LoRA 制品语义 {#lora-artifact-semantics}
 

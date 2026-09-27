@@ -33,20 +33,24 @@ spec:
 `Model` and `ClusterModel` share the following Go API:
 
 ```go
+// ModelSpec declares an immutable model artifact and is shared by Model and ClusterModel.
 type ModelSpec struct {
     Source ModelSource      `json:"source"`
     LoRA   *LoRAArtifactSpec `json:"lora,omitempty"`
 }
 
+// LoRAArtifactSpec is set only on LoRA artifacts and declares which Base Model the LoRA can be applied to.
 type LoRAArtifactSpec struct {
     BaseModelRef ModelReference `json:"baseModelRef"`
 }
 
+// ModelReference refers to a Model or ClusterModel by kind and name.
 type ModelReference struct {
     Kind string `json:"kind"`
     Name string `json:"name"`
 }
 
+// ModelSource declares where the artifact is stored, its version identifier, and the Secret used to access it.
 type ModelSource struct {
     URI            string                        `json:"uri"`
     Revision       string                        `json:"revision,omitempty"`
@@ -54,8 +58,6 @@ type ModelSource struct {
     CredentialsRef *corev1.LocalObjectReference `json:"credentialsRef,omitempty"`
 }
 ```
-
-Omitting `lora` represents a Base Model; including it represents a LoRA. Whether `revision` and `digest` are required depends on the `uri` scheme.
 
 ### Scope and references {#scope-and-references}
 
@@ -65,28 +67,36 @@ All references belong to the `fusioninfer.io` API Group and contain only `kind` 
 - A cluster-scoped LoRA `ClusterModel` can reference only a `ClusterModel`.
 - `baseModelRef` must point to a Base Model, not another LoRA.
 
-References do not provide a default Kind, Namespace fallback, or fallback to a resource with the same name.
-
 ### Model sources {#model-sources}
 
 `source.uri` is required. The following sources are supported:
 
-- `hf://<repository>`: `revision` is required and must be a full commit SHA; `digest` is optional.
-- `s3://<bucket>/<prefix>`: `digest` is required.
-- `oci://<artifact>@sha256:<digest>`: the URI must include the descriptor digest; `source.digest` is optional.
+| Source | URI format | Version requirements | Example |
+| --- | --- | --- | --- |
+| Hugging Face | `hf://<repository>` | `revision` is required and must be a full commit SHA; `digest` is optional | `hf://Qwen/Qwen3-8B` |
+| S3 | `s3://<bucket>/<prefix>` | `digest` is required | `s3://team-a-models/base/qwen3-8b` |
+| OCI | `oci://<artifact>@sha256:<digest>` | The URI must include the descriptor digest; `source.digest` is optional | `oci://registry.example.com/models/qwen3-8b@sha256:9d2e…` |
 
-`source.digest` uses the format `sha256:<64 lowercase hexadecimal characters>`. The URI scheme must be lowercase. Queries, fragments, and `.` or `..` path segments are not allowed.
+`source.digest` uses the format `sha256:<64 lowercase hexadecimal characters>`.
 
-### Credentials contract {#credentials-contract}
+### Access credentials {#access-credentials}
 
 `source.credentialsRef` contains only a Secret name; a Namespace cannot be specified. When omitted, the platform-configured workload identity or anonymous access is used.
 
-- `hf://`: accepts an `Opaque` Secret that must contain `HF_TOKEN`.
-- `s3://`: accepts an `Opaque` Secret, uses standard AWS SDK key names, and supports both AWS S3 and S3-compatible storage.
-- `oci://`: accepts a `kubernetes.io/dockerconfigjson` Secret that must contain `.dockerconfigjson`.
+| Source | Secret type | Requirements |
+| --- | --- | --- |
+| `hf://` | `Opaque` | Must contain `HF_TOKEN` |
+| `s3://` | `Opaque` | Uses standard AWS SDK key names; supports AWS S3 and S3-compatible storage |
+| `oci://` | `kubernetes.io/dockerconfigjson` | Must contain `.dockerconfigjson` |
 
-- Namespaced `Model`: the Secret is resolved in the Model's Namespace.
-- `ClusterModel`: a Secret with the same name is resolved independently in the Namespace of each `InferenceDeployment` that consumes it. Different teams can provide their own credentials; the cluster-scoped object does not read Secrets across Namespaces or create a single global authentication state.
+Where the Secret is resolved depends on the resource scope:
+
+| Resource | Where the Secret is resolved |
+| --- | --- |
+| Namespaced `Model` | The Model's Namespace |
+| `ClusterModel` | The Namespace of each consuming `InferenceDeployment`, resolved independently |
+
+Different teams can provide their own credentials; the cluster-scoped object does not read Secrets across Namespaces or create a single global authentication state.
 
 ### LoRA artifact semantics {#lora-artifact-semantics}
 
