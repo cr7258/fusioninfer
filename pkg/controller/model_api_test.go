@@ -93,12 +93,6 @@ var _ = Describe("Model API contract", func() {
 				"uri": "oci://registry.example.com/models/qwen3-8b@" + ociDigest,
 			},
 		}),
-		Entry("PVC", "model-valid-pvc", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc://qwen3-weights/models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
 	)
 
 	DescribeTable("rejects invalid namespaced model declarations",
@@ -111,6 +105,12 @@ var _ = Describe("Model API contract", func() {
 		}),
 		Entry("unsupported scheme", "model-unsupported-scheme", map[string]any{
 			"source": map[string]any{"uri": "https://example.com/model"},
+		}),
+		Entry("unsupported pvc scheme", "model-unsupported-pvc", map[string]any{
+			"source": map[string]any{
+				"uri":    "pvc://qwen3-weights/models/qwen3-8b",
+				"digest": modelDigest,
+			},
 		}),
 		Entry("uppercase scheme", "model-uppercase-scheme", map[string]any{
 			"source": map[string]any{
@@ -174,31 +174,6 @@ var _ = Describe("Model API contract", func() {
 		}),
 		Entry("OCI URI with whitespace", "model-oci-whitespace", map[string]any{
 			"source": map[string]any{"uri": "oci://registry.example.com/models/qwen 3@" + ociDigest},
-		}),
-		Entry("PVC URI without claim", "model-pvc-no-claim", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc:///models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("PVC URI with invalid claim name", "model-pvc-invalid-claim", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc://NotValid/models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("PVC URI with overlong claim name", "model-pvc-overlong-claim", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc://" + strings.Repeat("a", 254) + "/models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("PVC credentials", "model-pvc-credentials", map[string]any{
-			"source": map[string]any{
-				"uri":            "pvc://qwen3-weights/models/qwen3-8b",
-				"digest":         modelDigest,
-				"credentialsRef": map[string]any{"name": "not-allowed"},
-			},
 		}),
 		Entry("empty credential name", "model-empty-credential", map[string]any{
 			"source": map[string]any{
@@ -304,7 +279,7 @@ var _ = Describe("Model API contract", func() {
 		Entry("ClusterModel", "model-valid-lora-cluster-ref", "ClusterModel"),
 	)
 
-	It("enforces cluster-scoped source and LoRA reference rules", func() {
+	It("enforces cluster-scoped LoRA reference rules", func() {
 		base := modelObject("ClusterModel", "cluster-model-valid", "", hfModelSpec())
 		Expect(k8sClient.Create(ctx, base)).To(Succeed())
 		DeferCleanup(func() {
@@ -328,12 +303,6 @@ var _ = Describe("Model API contract", func() {
 			_ = k8sClient.Delete(ctx, lora)
 		})
 
-		expectInvalidModel(ctx, modelObject("ClusterModel", "cluster-model-pvc", "", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc://qwen3-weights/models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}))
 		expectInvalidModel(ctx, modelObject("ClusterModel", "cluster-model-lora-model-ref", "", map[string]any{
 			"source": hfModelSpec()["source"],
 			"lora": map[string]any{

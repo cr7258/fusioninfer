@@ -102,7 +102,7 @@ spec:
                 x-kubernetes-validations:
                 - message: uri must use a supported lowercase scheme and identify
                     an artifact
-                  rule: self.uri.matches('^(hf|s3|oci|pvc)://.+$')
+                  rule: self.uri.matches('^(hf|s3|oci)://.+$')
                 - message: uri must use valid URI characters; encode spaces and non-ASCII
                     characters
                   rule: self.uri.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')
@@ -110,10 +110,6 @@ spec:
                   rule: '!self.uri.startsWith(''hf://'') || self.uri.matches(''^hf://[^/?#]+/[^/?#]+$'')'
                 - message: s3 uri must identify a bucket and prefix
                   rule: '!self.uri.startsWith(''s3://'') || self.uri.matches(''^s3://[^/?#]+/[^/?#]+(/[^/?#]+)*$'')'
-                - message: pvc uri must identify a Kubernetes claim name and subpath
-                  rule: '!self.uri.startsWith(''pvc://'') || self.uri.matches(''^pvc://[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*/[^/?#]+(/[^/?#]+)*$'')'
-                - message: pvc claim name must not exceed 253 characters
-                  rule: '!self.uri.startsWith(''pvc://'') || self.uri.matches(''^pvc://[^/]{1,253}/.+$'')'
                 - message: uri must not contain a query string or fragment
                   rule: '!self.uri.contains(''?'') && !self.uri.contains(''#'')'
                 - message: uri must not contain dot path segments
@@ -122,14 +118,11 @@ spec:
                 - message: hf sources require a full lowercase commit SHA revision
                   rule: '!self.uri.startsWith(''hf://'') || (has(self.revision) &&
                     self.revision.matches(''^[0-9a-f]{40}$''))'
-                - message: s3 and pvc sources require a digest
-                  rule: '!(self.uri.startsWith(''s3://'') || self.uri.startsWith(''pvc://''))
-                    || has(self.digest)'
+                - message: s3 sources require a digest
+                  rule: '!self.uri.startsWith(''s3://'') || has(self.digest)'
                 - message: oci uri must identify an artifact and include its descriptor
                     digest
                   rule: '!self.uri.startsWith(''oci://'') || self.uri.matches(''^oci://[^/?#]+/[^/?#@]+(/[^/?#@]+)*@sha256:[0-9a-f]{64}$'')'
-                - message: pvc sources do not allow credentialsRef
-                  rule: '!self.uri.startsWith(''pvc://'') || !has(self.credentialsRef)'
                 - message: credentialsRef.name must be a valid Kubernetes object name
                   rule: '!has(self.credentialsRef) || (has(self.credentialsRef.name)
                     && size(self.credentialsRef.name) <= 253 && self.credentialsRef.name.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$''))'
@@ -143,8 +136,6 @@ spec:
         - spec
         type: object
         x-kubernetes-validations:
-        - message: cluster-scoped models do not allow pvc sources
-          rule: '!self.spec.source.uri.startsWith(''pvc://'')'
         - message: cluster-scoped LoRA artifacts must reference a ClusterModel
           rule: '!has(self.spec.lora) || self.spec.lora.baseModelRef.kind == ''ClusterModel'''
     served: true
