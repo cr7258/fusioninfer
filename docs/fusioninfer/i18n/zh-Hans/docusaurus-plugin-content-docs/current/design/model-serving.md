@@ -4,7 +4,7 @@ title: 架构
 
 FusionInfer 将模型推理拆分为三个职责独立的概念资源：
 
-- [`Model` / `ClusterModel`](./model.md) 声明模型制品的来源和不可变版本。
+- [`Model` / `ClusterModel`](./model.md) 声明模型制品的来源和版本。
 - [`RuntimeProfile` / `ClusterRuntimeProfile`](./runtime-profile.md) 定义每个副本如何运行。
 - [`InferenceDeployment`](./inference-deployment.md) 绑定模型与 RuntimeProfile，并声明副本数、缓存策略和访问入口。
 
@@ -79,8 +79,7 @@ metadata:
   namespace: team-a
 spec:
   source:
-    uri: hf://Qwen/Qwen3-8B # 模型制品来源
-    revision: 0123456789abcdef0123456789abcdef01234567
+    uri: hf://Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218 # 模型制品来源
 ```
 
 详细设计见 [Model 与 ClusterModel](./model.md)。

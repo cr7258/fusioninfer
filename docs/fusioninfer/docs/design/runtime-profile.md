@@ -3,7 +3,7 @@ title: RuntimeProfile and ClusterRuntimeProfile
 description: Define reusable runtime templates for aggregated, Prefill/Decode-disaggregated, and multi-node inference.
 ---
 
-## Resource Definition {#resource-definition}
+## Overview {#overview}
 
 `RuntimeProfile` and `ClusterRuntimeProfile` declare reusable inference runtime templates, including the backend, inference image, startup arguments, LoRA loading capabilities, Pod topology, and Aggregated or Prefill/Decode roles:
 

@@ -3,9 +3,9 @@ title: InferenceDeployment
 description: 绑定 Model 与 RuntimeProfile，并声明副本数、缓存、路由、发布与状态行为。
 ---
 
-## 资源定位 {#resource-purpose}
+## 概述 {#overview}
 
-`InferenceDeployment` 是 Namespaced 资源，用于创建一个可访问的模型推理服务。它通过显式引用绑定 Base Model、可选的多个 LoRA 和 RuntimeProfile，并声明部署副本数、模型物化时机和 Gateway API 入口。
+`InferenceDeployment` 是 Namespaced 资源，用于创建一个可访问的模型推理服务。它通过显式引用绑定 Base Model、可选的多个 LoRA 和 RuntimeProfile，并声明部署副本数、模型的下载与缓存时机，以及 Gateway API 入口。
 
 下面是一个最小的 Aggregated 结构示例。省略 `spec.cache` 时使用默认的 `lazy` 模式。
 
@@ -134,7 +134,7 @@ Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `mod
 
 引用的 RuntimeProfile 必须声明 `spec.lora`：
 
-- `loadingMode: preload`：Controller 在创建 workload revision 前物化全部 LoRA，并把绑定清单交给 backend 的启动集成。增加、删除或替换绑定会创建新的 workload revision。
+- `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并把绑定清单交给 backend 的启动集成。增加、删除或替换绑定会创建新的 workload revision。
 - `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。
 
 P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻辑副本。Controller 通过 backend integration 调用各逻辑副本的 Pod-local LoRA management endpoint；backend 可以由 Leader 协调组内加载，也可以由 integration 向全部成员 fan-out。只有该副本的 Leader 和 Worker 都确认目标 digest 已加载后才计为 Ready。
@@ -159,13 +159,13 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 `spec.cache` 省略时默认为 `lazy`。显式设置 `cache.mode` 可以选择部署使用模型制品的时机：
 
 - `lazy`：Pod 调度到节点后，由注入的 init container 检查节点缓存。缓存缺失时下载并校验模型，完成后才启动推理引擎。
-- `eager`：创建新推理工作负载前，先在满足角色调度约束的节点上运行预热 Job。所需副本全部物化后才创建新工作负载。
+- `eager`：创建新推理工作负载前，先在满足角色调度约束的节点上运行预热 Job。所需的缓存副本全部就绪后才创建新工作负载。
 
-该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上的受信任 materializer 按需物化；无论哪种缓存模式，物化完成后才调用 backend 加载接口。
+该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上受信任的下载组件按需下载和缓存；无论哪种缓存模式，都在下载和缓存完成后才调用 backend 加载接口。
 
 `eager` 为每个角色按“逻辑副本数 × 有效节点数”计算预热需求。有效节点数来自该角色的 `multinode.nodeCount`，未设置时为 1；Controller 在满足 Pod 模板调度约束的 distinct nodes 上各准备一份模型缓存。
 
-两种模式使用相同的内容寻址节点缓存，并以规范化 source URI、revision 或 OCI descriptor digest，以及可选 `source.digest` 派生不可变 cache key。
+两种模式使用相同的节点缓存。cache key 由规范化后的 source URI 派生，URI 相同的 Model 共用同一份缓存。
 
 `eager` 预热 Job 不申请或预留 GPU。模型已预热但 GPU 不可用时，工作负载可以保持 Pending；新版本失败不会提前删除仍在服务的上一版本。
 
@@ -223,7 +223,7 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 
 ## Status {#status}
 
-`InferenceDeployment.status` 汇总引用解析、模型物化、工作负载、路由和 rollout 状态：
+`InferenceDeployment.status` 汇总引用解析、模型缓存、工作负载、路由和 rollout 状态：
 
 ```go
 type InferenceDeploymentStatus struct {
@@ -284,15 +284,15 @@ type LoRAComponentStatus struct {
 }
 ```
 
-`components` 使用稳定的 `endpointPicker`、`aggregated`、`prefiller` 和 `decoder` 键。`nodesPerReplica` 记录 RuntimeProfile 中生效的 `multinode.nodeCount`，未设置时为 1；`readyReplicas` 只统计该逻辑副本全部 `nodesPerReplica` 个 Pod 都 Ready 的副本。`ModelCacheStatus.desiredCopies` 和 `readyCopies` 分别记录当前 revision 期望和已经完成的 distinct node 缓存副本数。`activeRevision` 表示当前接收流量的版本；`pendingRevision` 表示正在物化、调度或等待提升的新版本。
+`components` 使用稳定的 `endpointPicker`、`aggregated`、`prefiller` 和 `decoder` 键。`nodesPerReplica` 记录 RuntimeProfile 中生效的 `multinode.nodeCount`，未设置时为 1；`readyReplicas` 只统计该逻辑副本全部 `nodesPerReplica` 个 Pod 都 Ready 的副本。`ModelCacheStatus.desiredCopies` 和 `readyCopies` 分别记录当前 revision 期望和已经完成的 distinct node 缓存副本数。`activeRevision` 表示当前接收流量的版本；`pendingRevision` 表示正在缓存模型、调度或等待提升的新版本。
 
 `status.lora` 以 `servedName` 为列表键，并为每个绑定汇总解析后的 Model、缓存副本以及各角色的加载进度。它不公开 backend management endpoint 的地址或逐 Pod 错误正文。`preload` 模式的 Ready 状态随 workload revision 提升；`dynamic` 模式直接反映当前 active revision 中的加载状态。
 
 Conditions 使用标准 `metav1.Condition`，不增加单一 `phase`：
 
 - `ReferencesResolved`：Base Model、全部 LoRA Model 和 RuntimeProfile 引用已经解析并通过消费方校验。
-- `ModelMaterialized`：当前 revision 所需的 Base Model 缓存副本已经满足；LoRA 物化状态记录在各绑定中。
-- `LoRAReady`：所有声明的 LoRA 已完成解析、物化，并加载到全部要求的逻辑副本；没有 LoRA 时为 `True`。
+- `ModelMaterialized`：当前 revision 所需的 Base Model 缓存副本已经满足；LoRA 的缓存状态记录在各绑定中。
+- `LoRAReady`：所有声明的 LoRA 已完成解析、下载和缓存，并加载到全部要求的逻辑副本；没有 LoRA 时为 `True`。
 - `WorkloadsReady`：所有角色的期望逻辑副本已经 Ready；多节点逻辑副本要求 Leader 和全部 Worker Pod 都 Ready。
 - `RouteReady`：Service、InferencePool、Endpoint Picker 和 HTTPRoute 已经就绪。
 - `Available`：当前 active revision 可以接受请求。

@@ -556,7 +556,7 @@ spec:
 
 Prefiller LWS 创建一个两 Pod 逻辑副本，Decoder LWS 创建两个四 Pod 逻辑副本。角色模板中的 Leader/Worker 启动配置来自同一份 RuntimeProfile `podTemplate` 和 backend adapter。
 
-P/D 部署即使所有逻辑副本都是单节点，也使用共享 PodGroup 协调 Prefiller 与 Decoder 的最低可用集合。DisaggregatedSet 负责角色工作负载，FusionInfer 负责模型物化、共享 PodGroup 和 GAIE 路由。Endpoint Picker 和 InferencePool 只在待发布 revision 的期望角色全部就绪后切换流量。
+P/D 部署即使所有逻辑副本都是单节点，也使用共享 PodGroup 协调 Prefiller 与 Decoder 的最低可用集合。DisaggregatedSet 负责角色工作负载，FusionInfer 负责模型下载与缓存、共享 PodGroup 和 GAIE 路由。Endpoint Picker 和 InferencePool 只在待发布 revision 的期望角色全部就绪后切换流量。
 
 ## Backend 分布式运行 {#backend-distributed-execution}
 
@@ -708,8 +708,8 @@ Model、RuntimeProfile 或缓存模式变化会产生新的 template hash。Cont
 
 只有以下条件同时满足时才提升新 revision：
 
-- 所需模型副本已经物化。
-- 预加载模式下，全部 LoRA 已物化并随引擎启动成功。
+- 所需的模型缓存副本已经就绪。
+- 预加载模式下，全部 LoRA 已完成下载和缓存，并随引擎启动成功。
 - 每个逻辑副本的 Leader 和全部 Worker 都 Ready。
 - Aggregated 或 Prefill/Decode 的全部期望逻辑副本 Ready。
 - 角色 Service 已产生 Ready Endpoint。
