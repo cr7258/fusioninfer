@@ -15,7 +15,8 @@ limitations under the License.
 */
 
 // Package cel tests the OpenAPI schema and CEL validation rules of the FusionInfer CRDs
-// against a real API server.
+// against a real API server. The tests run in parallel against one API server, so every
+// test object needs a unique name.
 package cel
 
 import (
@@ -32,12 +33,17 @@ import (
 	"github.com/fusioninfer/fusioninfer/test/utils"
 )
 
+// k8sClient talks to the envtest API server and is shared by all tests in the package.
 var k8sClient client.Client
 
+// TestMain starts envtest once for the package, runs the tests, and stops envtest.
 func TestMain(m *testing.M) {
+	// os.Exit skips deferred calls, so the work happens in run, whose defers stop envtest first.
 	os.Exit(run(m))
 }
 
+// run installs the FusionInfer CRDs into envtest and creates k8sClient. No manager runs,
+// so nothing reconciles the test objects.
 func run(m *testing.M) int {
 	scheme := runtime.NewScheme()
 	if err := fusioninferiov1alpha1.AddToScheme(scheme); err != nil {
@@ -48,6 +54,7 @@ func run(m *testing.M) int {
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
+		// Lets the tests run from an IDE; KUBEBUILDER_ASSETS, set by make test, takes precedence.
 		BinaryAssetsDirectory: utils.FirstEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
 	cfg, err := testEnv.Start()

@@ -33,12 +33,15 @@ import (
 
 const (
 	modelAPIVersion = "fusioninfer.io/v1alpha1"
-	hfModelURI      = "hf://Qwen/Qwen3-8B"
-	s3AdapterURI    = "s3://team-a-models/adapters/qwen3-8b-finance"
-	ociModelURI     = "oci://registry.example.com/models/qwen3-8b"
-	commitSHA       = "b968826d9c46dd6066d109eabc6255188de91218"
-	ociDigest       = "sha256:9d2e6b4a8f1c30573a7e9c2d5b608f14e1d4a7c3096b2f855c8e1a6d4f703b29"
 
+	// Valid sources that the test objects start from.
+	hfModelURI   = "hf://Qwen/Qwen3-8B"
+	s3AdapterURI = "s3://team-a-models/adapters/qwen3-8b-finance"
+	ociModelURI  = "oci://registry.example.com/models/qwen3-8b"
+	commitSHA    = "b968826d9c46dd6066d109eabc6255188de91218"
+	ociDigest    = "sha256:9d2e6b4a8f1c30573a7e9c2d5b608f14e1d4a7c3096b2f855c8e1a6d4f703b29"
+
+	// Messages of the URI validation rules; the tests match them as substrings of the API error.
 	msgScheme      = "uri must use a supported lowercase scheme"
 	msgCharacters  = "uri must use valid URI characters"
 	msgQuery       = "uri must not contain a query string or fragment"
@@ -49,6 +52,8 @@ const (
 	msgOCI         = "oci uri must be oci://<registry>/<repository>"
 )
 
+// modelObject builds an unstructured Model or ClusterModel, so the tests can send missing or
+// malformed fields that the typed structs cannot express.
 func modelObject(kind, name, namespace string, spec map[string]any) *unstructured.Unstructured {
 	object := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -64,33 +69,40 @@ func modelObject(kind, name, namespace string, spec map[string]any) *unstructure
 	return object
 }
 
+// sourceSpec returns a spec that only sets source.uri.
 func sourceSpec(uri string) map[string]any {
 	return map[string]any{"source": map[string]any{"uri": uri}}
 }
 
+// credentialsSpec returns a spec with a valid URI and the given credentialsRef.
 func credentialsSpec(credentialsRef map[string]any) map[string]any {
 	return map[string]any{
 		"source": map[string]any{"uri": hfModelURI, "credentialsRef": credentialsRef},
 	}
 }
 
+// prefetchSpec returns a spec with a valid URI and the given prefetch.
 func prefetchSpec(prefetch map[string]any) map[string]any {
 	spec := sourceSpec(hfModelURI)
 	spec["prefetch"] = prefetch
 	return spec
 }
 
+// loraSpec returns a LoRA adapter spec that references baseModelRef.
 func loraSpec(baseModelRef map[string]any) map[string]any {
 	spec := sourceSpec(s3AdapterURI)
 	spec["lora"] = map[string]any{"baseModelRef": baseModelRef}
 	return spec
 }
 
+// createModel creates object, fails the test if the API server rejects it, and deletes it when
+// the test ends.
 func createModel(t *testing.T, object *unstructured.Unstructured) {
 	t.Helper()
 	if err := k8sClient.Create(t.Context(), object); err != nil {
 		t.Fatalf("create %s %q: %v", object.GetKind(), object.GetName(), err)
 	}
+	// t.Context is canceled before cleanups run, so delete with a fresh context.
 	t.Cleanup(func() {
 		_ = k8sClient.Delete(context.Background(), object)
 	})
@@ -111,12 +123,14 @@ func updateModel(
 	return k8sClient.Update(ctx, latest)
 }
 
+// setField returns a mutation that sets the field at the given path to value.
 func setField(value any, fields ...string) func(*unstructured.Unstructured) error {
 	return func(object *unstructured.Unstructured) error {
 		return unstructured.SetNestedField(object.Object, value, fields...)
 	}
 }
 
+// removeField returns a mutation that deletes the field at the given path.
 func removeField(fields ...string) func(*unstructured.Unstructured) error {
 	return func(object *unstructured.Unstructured) error {
 		unstructured.RemoveNestedField(object.Object, fields...)
@@ -124,6 +138,7 @@ func removeField(fields ...string) func(*unstructured.Unstructured) error {
 	}
 }
 
+// expectInvalid checks that the API server rejected the request as Invalid and mentioned message.
 func expectInvalid(t *testing.T, err error, message string) {
 	t.Helper()
 	if !apierrors.IsInvalid(err) {
@@ -135,6 +150,7 @@ func expectInvalid(t *testing.T, err error, message string) {
 	}
 }
 
+// TestModelAcceptsSupportedSourceURIs checks that valid hf, s3 and oci URIs are accepted.
 func TestModelAcceptsSupportedSourceURIs(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -161,6 +177,7 @@ func TestModelAcceptsSupportedSourceURIs(t *testing.T) {
 	}
 }
 
+// TestModelRejectsInvalidSourceURIs checks that each URI rule rejects a malformed URI with its own message.
 func TestModelRejectsInvalidSourceURIs(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -204,6 +221,7 @@ func TestModelRejectsInvalidSourceURIs(t *testing.T) {
 	}
 }
 
+// TestModelAcceptsCredentialsAndPrefetch checks the valid forms of credentialsRef and prefetch.
 func TestModelAcceptsCredentialsAndPrefetch(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -226,6 +244,8 @@ func TestModelAcceptsCredentialsAndPrefetch(t *testing.T) {
 	}
 }
 
+// TestModelRejectsInvalidDeclarations checks the schema and CEL rules on source, credentialsRef,
+// prefetch and lora.
 func TestModelRejectsInvalidDeclarations(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -273,6 +293,7 @@ func TestModelRejectsInvalidDeclarations(t *testing.T) {
 	}
 }
 
+// TestModelAcceptsNamespacedLoRAReferences checks that a namespaced LoRA can reference a Model or a ClusterModel.
 func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -294,6 +315,7 @@ func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 	}
 }
 
+// TestClusterModelLoRAMustReferenceClusterModel checks that a cluster-scoped LoRA can only reference a ClusterModel.
 func TestClusterModelLoRAMustReferenceClusterModel(t *testing.T) {
 	t.Parallel()
 	createModel(t, modelObject("ClusterModel", "cluster-lora-cluster-ref", "", loraSpec(map[string]any{
@@ -308,6 +330,8 @@ func TestClusterModelLoRAMustReferenceClusterModel(t *testing.T) {
 	expectInvalid(t, k8sClient.Create(t.Context(), object), "cluster-scoped LoRA artifacts must reference a ClusterModel")
 }
 
+// TestModelUpdatesKeepURIAndLoRAImmutable checks which fields can change after creation:
+// metadata, credentialsRef and prefetch can; uri and lora cannot.
 func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -328,6 +352,7 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 			adapter := modelObject(tt.kind, "update-lora-"+suffix, tt.namespace, loraSpec(baseRef))
 			createModel(t, adapter)
 
+			// Updates that must succeed, applied to base in order.
 			allowed := []struct {
 				desc   string
 				mutate func(*unstructured.Unstructured) error
@@ -346,6 +371,7 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 				}
 			}
 
+			// Updates that the immutability rules must reject.
 			rejected := []struct {
 				object  *unstructured.Unstructured
 				mutate  func(*unstructured.Unstructured) error
@@ -363,6 +389,8 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 	}
 }
 
+// TestModelStatusUpdatesOnlyThroughSubresource checks that status is written only through the status
+// subresource and that its prefetch counts are validated.
 func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -380,6 +408,7 @@ func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
 		_ = k8sClient.Delete(context.Background(), model)
 	})
 
+	// Writing through the status subresource stores the status.
 	model.Status.ObservedGeneration = model.Generation
 	model.Status.Prefetch = &fusioninferiov1alpha1.PrefetchStatus{DesiredNodes: 4, ReadyNodes: 3, FailedNodes: 1}
 	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
@@ -403,6 +432,7 @@ func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
 		t.Errorf("condition %s is not True", fusioninferiov1alpha1.ModelConditionAccessible)
 	}
 
+	// Updating the main resource must leave the status unchanged.
 	stored.Status = fusioninferiov1alpha1.ModelStatus{}
 	stored.Annotations = map[string]string{"fusioninfer.io/test": "status-preserved"}
 	if err := k8sClient.Update(ctx, stored); err != nil {
@@ -415,10 +445,12 @@ func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
 		t.Fatalf("status.prefetch changed by a main resource update (-want +got):\n%s", diff)
 	}
 
+	// The status subresource still validates the counts, which cannot be negative.
 	stored.Status.Prefetch.ReadyNodes = -1
 	expectInvalid(t, k8sClient.Status().Update(ctx, stored), "status.prefetch.readyNodes")
 }
 
+// TestModelRejectsObjectWithoutSpec checks that spec is required.
 func TestModelRejectsObjectWithoutSpec(t *testing.T) {
 	t.Parallel()
 	object := &unstructured.Unstructured{}
