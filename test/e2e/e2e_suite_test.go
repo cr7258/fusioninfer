@@ -20,13 +20,14 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"sigs.k8s.io/e2e-framework/pkg/env"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
 	"github.com/fusioninfer/fusioninfer/test/utils"
 )
@@ -43,50 +44,69 @@ var (
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "example.com/fusioninfer:v0.0.1"
+
+	testenv env.Environment
 )
 
-// TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
+// TestMain runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purpose of being used in CI jobs.
 // The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
 // CertManager.
-func TestE2E(t *testing.T) {
-	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting fusioninfer integration test suite\n")
-	RunSpecs(t, "e2e suite")
+func TestMain(m *testing.M) {
+	var err error
+	testenv, err = env.NewFromFlags()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create test environment: %v\n", err)
+		os.Exit(1)
+	}
+	testenv.Setup(buildAndLoadManagerImage, setUpCertManager)
+	testenv.Finish(tearDownCertManager)
+
+	fmt.Println("Starting fusioninfer integration test suite")
+	os.Exit(testenv.Run(m))
 }
 
-var _ = BeforeSuite(func() {
-	By("building the manager(Operator) image")
+func buildAndLoadManagerImage(ctx context.Context, _ *envconf.Config) (context.Context, error) {
+	fmt.Println("building the manager(Operator) image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
-
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
-	By("loading the manager(Operator) image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
-
-	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
-	// To prevent errors when tests run in environments with CertManager already installed,
-	// we check for its presence before execution.
-	// Setup CertManager before the suite if not skipped and if not already installed
-	if !skipCertManagerInstall {
-		By("checking if cert manager is installed already")
-		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
-		if !isCertManagerAlreadyInstalled {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-		} else {
-			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
-		}
+	if _, err := utils.Run(cmd); err != nil {
+		return ctx, fmt.Errorf("failed to build the manager(Operator) image: %w", err)
 	}
-})
 
-var _ = AfterSuite(func() {
-	// Teardown CertManager after the suite if not skipped and if it was not already installed
+	// To run the e2e tests on a cluster other than Kind, make sure the image is built and
+	// available before running the tests, and remove the following block.
+	fmt.Println("loading the manager(Operator) image on Kind")
+	if err := utils.LoadImageToKindClusterWithName(projectImage); err != nil {
+		return ctx, fmt.Errorf("failed to load the manager(Operator) image into Kind: %w", err)
+	}
+	return ctx, nil
+}
+
+// setUpCertManager installs CertManager unless it is skipped or already installed. The e2e
+// tests are intended to run on a temporary cluster that is created and destroyed for testing;
+// checking for CertManager first prevents errors on clusters where it is already installed.
+func setUpCertManager(ctx context.Context, _ *envconf.Config) (context.Context, error) {
+	if skipCertManagerInstall {
+		return ctx, nil
+	}
+	fmt.Println("checking if cert manager is installed already")
+	isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
+	if isCertManagerAlreadyInstalled {
+		fmt.Println("WARNING: CertManager is already installed. Skipping installation...")
+		return ctx, nil
+	}
+	fmt.Println("Installing CertManager...")
+	if err := utils.InstallCertManager(); err != nil {
+		return ctx, fmt.Errorf("failed to install CertManager: %w", err)
+	}
+	return ctx, nil
+}
+
+// tearDownCertManager uninstalls CertManager if the suite installed it.
+func tearDownCertManager(ctx context.Context, _ *envconf.Config) (context.Context, error) {
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
+		fmt.Println("Uninstalling CertManager...")
 		utils.UninstallCertManager()
 	}
-})
+	return ctx, nil
+}
