@@ -31,6 +31,8 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=fusioninfer.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithKind("ClusterModel"):
+		return &corev1alpha1.ClusterModelApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ComponentStatus"):
 		return &corev1alpha1.ComponentStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceService"):
@@ -39,12 +41,30 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1alpha1.InferenceServiceSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceServiceStatus"):
 		return &corev1alpha1.InferenceServiceStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("LoRAArtifactSpec"):
+		return &corev1alpha1.LoRAArtifactSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("Model"):
+		return &corev1alpha1.ModelApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ModelReference"):
+		return &corev1alpha1.ModelReferenceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ModelSource"):
+		return &corev1alpha1.ModelSourceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ModelSpec"):
+		return &corev1alpha1.ModelSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ModelStatus"):
+		return &corev1alpha1.ModelStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Multinode"):
 		return &corev1alpha1.MultinodeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PrefetchSpec"):
+		return &corev1alpha1.PrefetchSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PrefetchStatus"):
+		return &corev1alpha1.PrefetchStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Role"):
 		return &corev1alpha1.RoleApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("SchedulingStrategy"):
 		return &corev1alpha1.SchedulingStrategyApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("SecretReference"):
+		return &corev1alpha1.SecretReferenceApplyConfiguration{}
 
 	}
 	return nil

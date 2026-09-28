@@ -166,7 +166,7 @@ const config: Config = {
             },
             {
               label: 'Developer Guide',
-              to: '/docs/developer-guide/clientset-generation',
+              to: '/docs/developer-guide/code-generation',
             },
           ],
         },

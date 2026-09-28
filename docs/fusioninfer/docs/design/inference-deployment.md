@@ -3,7 +3,7 @@ title: InferenceDeployment
 description: Bind a Model to a RuntimeProfile and declare replicas, caching, routing, rollout, and status behavior.
 ---
 
-## Resource Purpose {#resource-purpose}
+## Overview {#overview}
 
 `InferenceDeployment` is a Namespaced resource that creates an accessible model inference service. It binds a Base Model, optional LoRAs, and a RuntimeProfile through explicit references, and declares the deployment replica counts, model materialization timing, and Gateway API entry point.
 
@@ -165,15 +165,13 @@ This policy applies to both the Base Model and the artifacts referenced by `spec
 
 For each role, `eager` calculates the warming requirement as logical replica count × effective node count. The effective node count comes from the role's `multinode.nodeCount` and defaults to 1 when unset; the Controller prepares one model cache copy on each distinct node that satisfies the Pod template's scheduling constraints.
 
-Both modes use the same content-addressed node cache and derive an immutable cache key from the normalized source URI, the revision or OCI descriptor digest, and the optional `source.digest`.
+Both modes use the same node cache. The cache key is derived from the normalized source URI, so Models with the same URI share one cache copy.
 
 `eager` warm-up Jobs do not request or reserve GPUs. If the model is warm but GPUs are unavailable, the workload can remain Pending; a failed new version does not prematurely delete the previous version that is still serving.
 
-`pvc://` sources must also be copied to the immutable node cache first. The engine mounts the cached copy read-only and does not use the mutable source PVC contents directly.
-
 ### Endpoint {#endpoint}
 
-`endpoint` is required in v1. The Controller creates Endpoint Picker, InferencePool, and HTTPRoute resources from this field:
+`endpoint` is required. The Controller creates Endpoint Picker, InferencePool, and HTTPRoute resources from this field:
 
 - `gatewayRef.name` specifies the Gateway to which the HTTPRoute attaches.
 - When `gatewayRef.namespace` is omitted, it uses the `InferenceDeployment`'s Namespace.

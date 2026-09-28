@@ -4,7 +4,7 @@ title: Architecture
 
 FusionInfer separates model inference into three conceptual resources with distinct responsibilities:
 
-- [`Model` / `ClusterModel`](./model.md) declares the source and immutable version of a model artifact.
+- [`Model` / `ClusterModel`](./model.md) declares the source and version of a model artifact.
 - [`RuntimeProfile` / `ClusterRuntimeProfile`](./runtime-profile.md) defines how each replica runs.
 - [`InferenceDeployment`](./inference-deployment.md) binds a Model to a RuntimeProfile and declares replica counts, cache policy, and access endpoint.
 
@@ -79,8 +79,7 @@ metadata:
   namespace: team-a
 spec:
   source:
-    uri: hf://Qwen/Qwen3-8B # Model artifact source
-    revision: 0123456789abcdef0123456789abcdef01234567
+    uri: hf://Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218 # Model artifact source
 ```
 
 For the detailed design, see [Model and ClusterModel](./model.md).

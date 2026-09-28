@@ -3,7 +3,7 @@ title: RuntimeProfile 与 ClusterRuntimeProfile
 description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode 分离和多节点推理。
 ---
 
-## 资源定位 {#resource-definition}
+## 概述 {#overview}
 
 `RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括 backend、推理镜像、启动参数、LoRA 加载能力、Pod 形态以及 Aggregated 或 Prefill/Decode 角色：
 
@@ -130,7 +130,7 @@ type MultinodeSpec struct {
 `spec.lora` 声明该 Profile 能否消费 `InferenceDeployment.spec.lora`，并固定 LoRA 的加载生命周期：
 
 - 省略 `lora` 时，该 Profile 不接受 LoRA 绑定。
-- `loadingMode: preload` 在引擎启动前物化并挂载全部 LoRA。绑定集合变化会生成新的 workload revision。
+- `loadingMode: preload` 在引擎启动前下载、缓存并挂载全部 LoRA。绑定集合变化会生成新的 workload revision。
 - `loadingMode: dynamic` 在 Base Model 工作负载运行后加载或卸载 LoRA，不因绑定集合变化重启 Base Model。
 - `maxLoadedAdapters` 限制单个 InferenceDeployment 可以同时绑定的 LoRA 数量。
 
@@ -175,7 +175,7 @@ FUSION_MODEL_PATH=/models
 FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
 ```
 
-Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存根目录。Profile 不能声明上述保留字段，也不能覆盖 Operator 管理的 materializer 或 Endpoint Picker 镜像。
+Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存根目录。Profile 不能声明上述保留字段，也不能覆盖 Operator 管理的模型下载组件或 Endpoint Picker 镜像。
 
 声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。引擎容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
 
@@ -208,7 +208,7 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - backend adapter 必须支持模板中声明的镜像和入口参数。
 - 模板不能声明 backend adapter 保留的 executor、地址、rank、`nnodes` 或 headless 参数。
 - 模板镜像必须使用 OCI digest 固定。
-- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 在 v1 中不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
+- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
 
 ## Status {#status}
 

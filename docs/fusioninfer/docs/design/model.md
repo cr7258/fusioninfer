@@ -3,7 +3,7 @@ title: Model and ClusterModel
 description: Define namespaced or cluster-scoped immutable model artifacts and optional LoRA adapter bindings.
 ---
 
-## Resource scope {#resource-scope}
+## Overview {#overview}
 
 `Model` and `ClusterModel` declare the source of a model artifact and its version identifier:
 
@@ -11,6 +11,8 @@ description: Define namespaced or cluster-scoped immutable model artifacts and o
 - `ClusterModel` is a cluster-scoped resource for models shared across Namespaces.
 
 Both Kinds use the same `ModelSpec`. Setting only `spec.source` represents a Base Model; setting both `spec.source` and `spec.lora.baseModelRef` represents a LoRA artifact.
+
+The model agent that FusionInfer runs on each node downloads model files into the node cache. See [Prefetch](#prefetch) for when downloads happen.
 
 The following example is a minimal Namespaced Base Model:
 
@@ -23,7 +25,6 @@ metadata:
 spec:
   source:
     uri: hf://Qwen/Qwen3-8B
-    revision: 0123456789abcdef0123456789abcdef01234567
 ```
 
 ## Spec {#spec}
@@ -33,87 +34,193 @@ spec:
 `Model` and `ClusterModel` share the following Go API:
 
 ```go
+// ModelSpec declares a model artifact and the nodes to prefetch it to, and is shared by Model and ClusterModel.
 type ModelSpec struct {
-    Source ModelSource      `json:"source"`
-    LoRA   *LoRAArtifactSpec `json:"lora,omitempty"`
+    Source   ModelSource       `json:"source"`
+    LoRA     *LoRAArtifactSpec `json:"lora,omitempty"`
+    Prefetch *PrefetchSpec     `json:"prefetch,omitempty"`
 }
 
+// LoRAArtifactSpec is set only on LoRA artifacts and declares which Base Model the LoRA can be applied to.
 type LoRAArtifactSpec struct {
     BaseModelRef ModelReference `json:"baseModelRef"`
 }
 
+// ModelReference refers to a Model or ClusterModel by kind and name.
 type ModelReference struct {
     Kind string `json:"kind"`
     Name string `json:"name"`
 }
 
+// ModelSource declares where the artifact is stored, with the version in the URI, and the Secret used to access it.
 type ModelSource struct {
-    URI            string                        `json:"uri"`
-    Revision       string                        `json:"revision,omitempty"`
-    Digest         string                        `json:"digest,omitempty"`
-    CredentialsRef *corev1.LocalObjectReference `json:"credentialsRef,omitempty"`
+    URI            string           `json:"uri"`
+    CredentialsRef *SecretReference `json:"credentialsRef,omitempty"`
+}
+
+// SecretReference refers to a Secret by name; the resource scope determines the Secret's Namespace.
+type SecretReference struct {
+    Name string `json:"name"`
+}
+
+// PrefetchSpec declares which nodes the model is downloaded to ahead of time.
+type PrefetchSpec struct {
+    NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+    NodeName     string            `json:"nodeName,omitempty"`
 }
 ```
 
-Omitting `lora` represents a Base Model; including it represents a LoRA. Whether `revision` and `digest` are required depends on the `uri` scheme.
+### Model sources {#model-sources}
 
-### Scope and references {#scope-and-references}
+`source.uri` specifies where the model files are stored. The URI scheme determines the storage type, and the version is also written in the URI. It is required and supports the following sources; parts in square brackets are optional:
 
-All references belong to the `fusioninfer.io` API Group and contain only `kind` and `name`:
+| Source | URI format | Description | Example |
+| --- | --- | --- | --- |
+| Hugging Face | `hf://<owner>/<repo>[@<revision>]` | `revision` can be a branch, tag, or commit SHA; the repository's default branch is used when omitted | `hf://Qwen/Qwen3-8B@main`<br />`hf://Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218` |
+| S3 | `s3://<bucket>/<prefix>` | Versions are not supported | `s3://team-a-models/base/qwen3-8b` |
+| OCI | `oci://<registry>/<repository>[:<tag>\|@sha256:<digest>]` | Specify a tag or a digest; `latest` is used when neither is specified | `oci://registry.example.com/models/qwen3-8b:v1`<br />`oci://registry.example.com/models/qwen3-8b@sha256:9d2e…` |
+
+### Access credentials {#access-credentials}
+
+`source.credentialsRef` contains only a Secret name; a Namespace cannot be specified. When omitted, no credentials are used and the source is accessed anonymously, so only public models can be downloaded.
+
+| Source | Secret type | Required keys | Optional keys |
+| --- | --- | --- | --- |
+| `hf://` | `Opaque` | `HF_TOKEN` | — |
+| `s3://` | `Opaque` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_ENDPOINT_URL` |
+| `oci://` | `kubernetes.io/dockerconfigjson` | `.dockerconfigjson` | — |
+
+The FusionInfer controller reads the Secret when it checks access to the source, and the model agent reads it when downloading. The Secret's Namespace depends on the resource scope:
+
+| Resource | Namespace of the Secret |
+| --- | --- |
+| Namespaced `Model` | The Model's Namespace |
+| `ClusterModel` | The FusionInfer system Namespace, such as `fusioninfer-system`, maintained by platform administrators |
+
+### LoRA artifacts {#lora-artifacts}
+
+A LoRA Model uses `source` to point to its adapter files and `lora.baseModelRef` to name the Base Model it is built for. The following example declares a LoRA that reads its adapter files from S3 and is applied on top of `qwen3-8b-hf-r1`:
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: Model
+metadata:
+  name: qwen3-8b-finance-lora-r1
+  namespace: team-a
+spec:
+  source:                # Location of the LoRA adapter files
+    uri: s3://team-a-models/adapters/qwen3-8b-finance-lora-r1
+    credentialsRef:
+      name: s3-model-reader
+  lora:
+    baseModelRef:        # Base Model the LoRA is built for
+      kind: Model
+      name: qwen3-8b-hf-r1
+```
+
+`baseModelRef` must follow these rules:
 
 - A Namespaced LoRA `Model` can reference a `Model` in the same Namespace or a cluster-scoped `ClusterModel`.
 - A cluster-scoped LoRA `ClusterModel` can reference only a `ClusterModel`.
-- `baseModelRef` must point to a Base Model, not another LoRA.
+- It must point to a Base Model, not another LoRA.
 
-References do not provide a default Kind, Namespace fallback, or fallback to a resource with the same name.
+A LoRA Model is loaded only after it is bound in an InferenceDeployment's `spec.lora[]`. The Deployment's `modelRef` determines which Base Model actually runs, and the InferenceDeployment controller loads the LoRA only when that reference and the LoRA's `baseModelRef` resolve to the same object. The following example runs `qwen3-8b-hf-r1` and binds the LoRA above:
 
-### Model sources {#model-sources}
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: InferenceDeployment
+metadata:
+  name: qwen3-8b-chat
+  namespace: team-a
+spec:
+  modelRef:              # Same Base Model as the LoRA's baseModelRef
+    kind: Model
+    name: qwen3-8b-hf-r1
+  lora:
+    - modelRef:
+        kind: Model
+        name: qwen3-8b-finance-lora-r1
+      servedName: finance  # Model name that selects the LoRA in requests
+  # runtimeRef, replicas, endpoint, and other fields are omitted
+```
 
-`source.uri` is required. v1 supports the following sources:
+### Prefetch {#prefetch}
 
-- `hf://<repository>`: `revision` is required and must be a full commit SHA; `digest` is optional.
-- `s3://<bucket>/<prefix>`: `digest` is required.
-- `oci://<artifact>@sha256:<digest>`: the URI must include the descriptor digest; `source.digest` is optional.
-- `pvc://<claim>/<subpath>`: permitted only for a Namespaced `Model`; `digest` is required, and `credentialsRef` is not allowed.
+By default, the model agent downloads a model only when an InferenceDeployment needs it. `prefetch` declares which nodes a model is downloaded to ahead of time, which suits large models that take a long time to download during scale-out:
 
-`source.digest` uses the format `sha256:<64 lowercase hexadecimal characters>`. The URI scheme must be lowercase. Queries, fragments, and `.` or `..` path segments are not allowed.
+| Configuration | Description |
+| --- | --- |
+| `prefetch` omitted | No proactive download; the model is downloaded when an InferenceDeployment needs it |
+| `prefetch: {}` | Download to every node that runs the model agent |
+| `nodeSelector` set | Download only to nodes whose labels match |
+| `nodeName` set | Download only to the specified node |
 
-### Credentials contract {#credentials-contract}
+The following example prefetches `qwen3-14b-shared-r1` to all H100 nodes:
 
-`source.credentialsRef` contains only a Secret name; a Namespace cannot be specified. When omitted, the platform-configured workload identity or anonymous access is used.
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterModel
+metadata:
+  name: qwen3-14b-shared-r1
+spec:
+  source:
+    uri: hf://Qwen/Qwen3-14B
+  prefetch:
+    nodeSelector:
+      node.kubernetes.io/instance-type: gpu-h100
+```
 
-- `hf://`: accepts an `Opaque` Secret that must contain `HF_TOKEN`.
-- `s3://`: accepts an `Opaque` Secret, uses standard AWS SDK key names, and supports both AWS S3 and S3-compatible storage.
-- `oci://`: accepts a `kubernetes.io/dockerconfigjson` Secret that must contain `.dockerconfigjson`.
-- `pvc://`: does not allow `credentialsRef`.
-
-- Namespaced `Model`: the Secret is resolved in the Model's Namespace.
-- `ClusterModel`: a Secret with the same name is resolved independently in the Namespace of each `InferenceDeployment` that consumes it. Different teams can provide their own credentials; the cluster-scoped object does not read Secrets across Namespaces or create a single global authentication state.
-
-### LoRA artifact semantics {#lora-artifact-semantics}
-
-A LoRA Model uses `source` to declare its adapter files and `lora.baseModelRef` to declare the corresponding Base Model. `baseModelRef` must be an explicit `kind + name` reference. v1 does not allow a LoRA to reference another LoRA.
-
-A LoRA Model is bound to an inference service through `InferenceDeployment.spec.lora[]`. The artifact's `baseModelRef` represents a compatibility constraint, while the Deployment's `modelRef` represents the Base Model that actually runs. The Controller loads the LoRA only when both references resolve to the same Kind, name, and UID. The consuming InferenceDeployment and RuntimeProfile manage the loading mode, target logical replicas, and per-role status.
-
-### Defaults and validation {#defaults-and-validation}
-
-- `spec.source` is required.
-- `revision`, `digest`, and `credentialsRef` must satisfy the constraints for the corresponding URI scheme.
-- When `lora` is present, `baseModelRef.kind` and `baseModelRef.name` are required.
-- `ClusterModel` does not allow `pvc://`.
-- A cluster-scoped LoRA cannot reference a Namespaced `Model`.
-- `Model.spec` and `ClusterModel.spec` are immutable in v1. Changing the source, version, credentials, or `baseModelRef` requires creating a new object.
+`prefetch` only places the model on nodes ahead of time and does not affect InferenceDeployment rollouts. When an InferenceDeployment uses the `eager` cache mode, it still confirms that the cache is ready on its target nodes before rollout, and prefetched nodes pass immediately.
 
 ## Status {#status}
 
-`Model` and `ClusterModel` do not provide a status subresource. The existence of a Model object indicates only that its declaration is valid; it does not indicate that the model has been downloaded or loaded.
+The FusionInfer controller checks access to the source and aggregates the per-node download results reported by the model agent into the Model status:
+
+```go
+// ModelStatus summarizes source accessibility and prefetch progress.
+type ModelStatus struct {
+    ObservedGeneration int64              `json:"observedGeneration,omitempty"`
+    Prefetch           *PrefetchStatus    `json:"prefetch,omitempty"`
+    Conditions         []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// PrefetchStatus records download progress on the nodes that match prefetch.
+type PrefetchStatus struct {
+    DesiredNodes int32 `json:"desiredNodes"`
+    ReadyNodes   int32 `json:"readyNodes"`
+    FailedNodes  int32 `json:"failedNodes"`
+}
+```
+
+Conditions use the standard `metav1.Condition`:
+
+- `Accessible`: the result of the FusionInfer controller accessing the source with the configured credentials. It checks access only and does not download model files. The check runs when the Model is created and again whenever the referenced Secret changes. On failure, `reason` is `AuthenticationFailed`, `NotFound`, or `Unreachable`.
+- `Prefetched`: present only when `prefetch` is set. It is `True` when every matching node has downloaded and verified the model; otherwise it is `False`, and `message` summarizes the failed nodes and reasons.
+
+The following example shows the status of the ClusterModel from [Prefetch](#prefetch), where one of four matching nodes failed to download the model:
+
+```yaml
+status:
+  observedGeneration: 2
+  prefetch:
+    desiredNodes: 4
+    readyNodes: 3
+    failedNodes: 1
+  conditions:
+    - type: Accessible
+      status: "True"
+      reason: Verified
+    - type: Prefetched
+      status: "False"
+      reason: DownloadFailed
+      message: "gpu-h100-4: insufficient disk space"
+```
 
 ## Examples {#examples}
 
 ### Model: Hugging Face Base Model {#model-hugging-face-base-model}
 
-This object resides in `team-a` and pins the repository version with a full HF commit SHA. `huggingface-token` is resolved in the same Namespace.
+This object resides in `team-a` and pins the repository version with a full commit SHA in the URI. `huggingface-token` is read from the same Namespace.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -123,31 +230,14 @@ metadata:
   namespace: team-a
 spec:
   source:
-    uri: hf://Qwen/Qwen3-8B
-    revision: 0123456789abcdef0123456789abcdef01234567
+    uri: hf://Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218
     credentialsRef:
       name: huggingface-token
 ```
 
-### Model: PVC Base Model {#model-pvc-base-model}
-
-This object and the `qwen3-weights` PVC both reside in `team-a`. `digest` verifies the model content in the PVC.
-
-```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: Model
-metadata:
-  name: qwen3-8b-pvc-r1
-  namespace: team-a
-spec:
-  source:
-    uri: pvc://qwen3-weights/models/qwen3-8b
-    digest: sha256:7f3c9a1e4b2d8f605a7c3e9d1b4f2860c5a8e2d7f1b3096c4e8a5d2f7b1c903e
-```
-
 ### Model: S3 Base Model {#model-s3-base-model}
 
-This object reads model files from S3-compatible storage and uses `digest` to verify the materialized content.
+This object reads model files from S3-compatible storage.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -158,14 +248,13 @@ metadata:
 spec:
   source:
     uri: s3://team-a-models/base/qwen3-8b-r1
-    digest: sha256:4a7d1ed414474e4033ac29ccb8653d9b8f9f45278a28a74cc2d8f7f31e4b6c90
     credentialsRef:
       name: s3-model-reader
 ```
 
 ### Model: OCI Base Model {#model-oci-base-model}
 
-The descriptor digest in the OCI URI pins the artifact version. Registry credentials are provided through a `kubernetes.io/dockerconfigjson` Secret.
+The digest in the URI pins the artifact version. Registry credentials are provided through a `kubernetes.io/dockerconfigjson` Secret.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -180,40 +269,27 @@ spec:
       name: model-registry-credentials
 ```
 
-### Model: LoRA {#model-lora}
+### ClusterModel: Cluster-scoped Base Model {#clustermodel-cluster-scoped-base-model}
 
-This LoRA resides in `team-a`. Its adapter files come from S3, and `baseModelRef` explicitly references a Base Model in the same Namespace.
+ClusterModel has the same fields as Model but no Namespace, and can be explicitly referenced by InferenceDeployments in multiple Namespaces. `meta-llama/Llama-3.1-8B-Instruct` below is a gated model, so it must be downloaded with a Hugging Face token whose account has been granted access. The Secret referenced by a ClusterModel lives in the FusionInfer system Namespace, `fusioninfer-system` in this example:
 
 ```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: Model
+apiVersion: v1
+kind: Secret
 metadata:
-  name: qwen3-8b-finance-lora-r1
-  namespace: team-a
-spec:
-  source:
-    uri: s3://team-a-models/adapters/qwen3-8b-finance-lora-r1
-    digest: sha256:c14a8d6f2e905b378f4c1a7d3e6b2095d2f8a4c7091e5b636a3d9f2e8c1b7045
-    credentialsRef:
-      name: s3-model-reader
-  lora:
-    baseModelRef:
-      kind: Model
-      name: qwen3-8b-hf-r1
-```
-
-### ClusterModel: Shared Base Model {#clustermodel-shared-base-model}
-
-ClusterModel has the same fields as Model but no Namespace. This regular Base Model can be explicitly referenced by InferenceDeployments in multiple Namespaces.
-
-```yaml
+  name: huggingface-token
+  namespace: fusioninfer-system  # Namespace for Secrets referenced by ClusterModels
+type: Opaque
+stringData:
+  HF_TOKEN: "<hf-token>"
+---
 apiVersion: fusioninfer.io/v1alpha1
 kind: ClusterModel
 metadata:
-  name: qwen3-14b-shared-r1
+  name: llama-3-1-8b-instruct-r1
 spec:
   source:
-    uri: hf://Qwen/Qwen3-14B
-    revision: 89abcdef0123456789abcdef0123456789abcdef
+    uri: hf://meta-llama/Llama-3.1-8B-Instruct
+    credentialsRef:
+      name: huggingface-token      # Read from fusioninfer-system
 ```
-
