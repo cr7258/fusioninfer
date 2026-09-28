@@ -47,8 +47,8 @@ Generated code or manifests are not up to date. Run 'make generate manifests' an
 
 | 标记 | 写在哪里 | 作用 |
 | --- | --- | --- |
-| `+kubebuilder:object:generate=true` | 包（`groupversion_info.go`、`doc.go`） | 为包中的所有类型生成 `DeepCopy` 和 `DeepCopyInto` |
-| `+groupName=fusioninfer.io` | 包（`groupversion_info.go`、`doc.go`） | 设置 API group，也决定 client 的方法名 `FusioninferV1alpha1()` |
+| `+kubebuilder:object:generate=true` | `package` 声明上方（`groupversion_info.go`、`doc.go`） | 为包中的所有类型生成 `DeepCopy` 和 `DeepCopyInto` |
+| `+groupName=fusioninfer.io` | `package` 声明上方（`groupversion_info.go`、`doc.go`） | 设置 API group，也决定 client 的方法名 `FusioninferV1alpha1()` |
 | `+kubebuilder:object:root=true` | 顶层资源类型及其 List 类型 | 额外生成 `DeepCopyObject`，使类型实现 `runtime.Object` |
 | `+kubebuilder:resource:scope=Namespaced`、`scope=Cluster` | 顶层资源类型 | 决定 CRD 是 Namespaced 还是 Cluster-scoped |
 | `+kubebuilder:subresource:status` | 顶层资源类型 | 为 CRD 开启 status subresource |

@@ -47,8 +47,8 @@ The generators decide what to produce from markers in Go comments. The table lis
 
 | Marker | Where | Effect |
 | --- | --- | --- |
-| `+kubebuilder:object:generate=true` | Package (`groupversion_info.go`, `doc.go`) | Generates `DeepCopy` and `DeepCopyInto` for every type in the package |
-| `+groupName=fusioninfer.io` | Package (`groupversion_info.go`, `doc.go`) | Sets the API group, which also names the client method `FusioninferV1alpha1()` |
+| `+kubebuilder:object:generate=true` | Above the `package` clause (`groupversion_info.go`, `doc.go`) | Generates `DeepCopy` and `DeepCopyInto` for every type in the package |
+| `+groupName=fusioninfer.io` | Above the `package` clause (`groupversion_info.go`, `doc.go`) | Sets the API group, which also names the client method `FusioninferV1alpha1()` |
 | `+kubebuilder:object:root=true` | Top-level resource types and their List types | Also generates `DeepCopyObject`, so the type implements `runtime.Object` |
 | `+kubebuilder:resource:scope=Namespaced`, `scope=Cluster` | Top-level resource types | Makes the CRD namespaced or cluster-scoped |
 | `+kubebuilder:subresource:status` | Top-level resource types | Enables the status subresource on the CRD |
