@@ -17,17 +17,11 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	v1 "k8s.io/api/core/v1"
-)
-
 // ModelSourceApplyConfiguration represents a declarative configuration of the ModelSource type for use
 // with apply.
 type ModelSourceApplyConfiguration struct {
-	URI            *string                  `json:"uri,omitempty"`
-	Revision       *string                  `json:"revision,omitempty"`
-	Digest         *string                  `json:"digest,omitempty"`
-	CredentialsRef *v1.LocalObjectReference `json:"credentialsRef,omitempty"`
+	URI            *string                            `json:"uri,omitempty"`
+	CredentialsRef *SecretReferenceApplyConfiguration `json:"credentialsRef,omitempty"`
 }
 
 // ModelSourceApplyConfiguration constructs a declarative configuration of the ModelSource type for use with
@@ -44,26 +38,10 @@ func (b *ModelSourceApplyConfiguration) WithURI(value string) *ModelSourceApplyC
 	return b
 }
 
-// WithRevision sets the Revision field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Revision field is set to the value of the last call.
-func (b *ModelSourceApplyConfiguration) WithRevision(value string) *ModelSourceApplyConfiguration {
-	b.Revision = &value
-	return b
-}
-
-// WithDigest sets the Digest field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Digest field is set to the value of the last call.
-func (b *ModelSourceApplyConfiguration) WithDigest(value string) *ModelSourceApplyConfiguration {
-	b.Digest = &value
-	return b
-}
-
 // WithCredentialsRef sets the CredentialsRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the CredentialsRef field is set to the value of the last call.
-func (b *ModelSourceApplyConfiguration) WithCredentialsRef(value v1.LocalObjectReference) *ModelSourceApplyConfiguration {
-	b.CredentialsRef = &value
+func (b *ModelSourceApplyConfiguration) WithCredentialsRef(value *SecretReferenceApplyConfiguration) *ModelSourceApplyConfiguration {
+	b.CredentialsRef = value
 	return b
 }

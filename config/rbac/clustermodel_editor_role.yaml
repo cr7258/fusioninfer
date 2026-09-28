@@ -25,3 +25,9 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - clustermodels/status
+  verbs:
+  - get

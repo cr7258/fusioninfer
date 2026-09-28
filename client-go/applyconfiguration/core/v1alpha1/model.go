@@ -28,7 +28,8 @@ import (
 type ModelApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                             *ModelSpecApplyConfiguration `json:"spec,omitempty"`
+	Spec                             *ModelSpecApplyConfiguration   `json:"spec,omitempty"`
+	Status                           *ModelStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // Model constructs a declarative configuration of the Model type for use with
@@ -206,6 +207,14 @@ func (b *ModelApplyConfiguration) ensureObjectMetaApplyConfigurationExists() {
 // If called multiple times, the Spec field is set to the value of the last call.
 func (b *ModelApplyConfiguration) WithSpec(value *ModelSpecApplyConfiguration) *ModelApplyConfiguration {
 	b.Spec = value
+	return b
+}
+
+// WithStatus sets the Status field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Status field is set to the value of the last call.
+func (b *ModelApplyConfiguration) WithStatus(value *ModelStatusApplyConfiguration) *ModelApplyConfiguration {
+	b.Status = value
 	return b
 }
 

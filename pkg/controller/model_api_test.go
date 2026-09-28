@@ -23,14 +23,30 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 )
 
 const (
 	modelAPIVersion = "fusioninfer.io/v1alpha1"
-	fullRevision    = "0123456789abcdef0123456789abcdef01234567"
-	modelDigest     = "sha256:7f3c9a1e4b2d8f605a7c3e9d1b4f2860c5a8e2d7f1b3096c4e8a5d2f7b1c903e"
+	hfModelURI      = "hf://Qwen/Qwen3-8B"
+	s3AdapterURI    = "s3://team-a-models/adapters/qwen3-8b-finance"
+	ociModelURI     = "oci://registry.example.com/models/qwen3-8b"
+	commitSHA       = "b968826d9c46dd6066d109eabc6255188de91218"
 	ociDigest       = "sha256:9d2e6b4a8f1c30573a7e9c2d5b608f14e1d4a7c3096b2f855c8e1a6d4f703b29"
+
+	msgScheme      = "uri must use a supported lowercase scheme"
+	msgCharacters  = "uri must use valid URI characters"
+	msgQuery       = "uri must not contain a query string or fragment"
+	msgDotSegments = "uri must not contain dot path segments"
+	msgPercent     = "uri must not percent-encode dots or slashes"
+	msgHF          = "hf uri must be hf://<owner>/<repo>"
+	msgS3          = "s3 uri must be s3://<bucket>/<prefix>"
+	msgOCI         = "oci uri must be oci://<registry>/<repository>"
 )
 
 func modelObject(kind, name, namespace string, spec map[string]any) *unstructured.Unstructured {
@@ -48,305 +64,265 @@ func modelObject(kind, name, namespace string, spec map[string]any) *unstructure
 	return object
 }
 
-func hfModelSpec() map[string]any {
+func sourceSpec(uri string) map[string]any {
+	return map[string]any{"source": map[string]any{"uri": uri}}
+}
+
+func credentialsSpec(credentialsRef map[string]any) map[string]any {
 	return map[string]any{
-		"source": map[string]any{
-			"uri":      "hf://Qwen/Qwen3-8B",
-			"revision": fullRevision,
-		},
+		"source": map[string]any{"uri": hfModelURI, "credentialsRef": credentialsRef},
 	}
 }
 
-func expectInvalidModel(ctx context.Context, object *unstructured.Unstructured) {
-	err := k8sClient.Create(ctx, object)
+func prefetchSpec(prefetch map[string]any) map[string]any {
+	spec := sourceSpec(hfModelURI)
+	spec["prefetch"] = prefetch
+	return spec
+}
+
+func loraSpec(baseModelRef map[string]any) map[string]any {
+	spec := sourceSpec(s3AdapterURI)
+	spec["lora"] = map[string]any{"baseModelRef": baseModelRef}
+	return spec
+}
+
+func createModel(ctx context.Context, object *unstructured.Unstructured) {
+	Expect(k8sClient.Create(ctx, object)).To(Succeed())
+	DeferCleanup(func() {
+		_ = k8sClient.Delete(ctx, object)
+	})
+}
+
+// updateModel applies mutate to the latest stored copy of object and writes it back.
+func updateModel(
+	ctx context.Context, object *unstructured.Unstructured, mutate func(*unstructured.Unstructured),
+) error {
+	latest := &unstructured.Unstructured{}
+	latest.SetGroupVersionKind(object.GroupVersionKind())
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(object), latest); err != nil {
+		return err
+	}
+	mutate(latest)
+	return k8sClient.Update(ctx, latest)
+}
+
+func setField(value any, fields ...string) func(*unstructured.Unstructured) {
+	return func(object *unstructured.Unstructured) {
+		Expect(unstructured.SetNestedField(object.Object, value, fields...)).To(Succeed())
+	}
+}
+
+func removeField(fields ...string) func(*unstructured.Unstructured) {
+	return func(object *unstructured.Unstructured) {
+		unstructured.RemoveNestedField(object.Object, fields...)
+	}
+}
+
+func expectInvalid(err error, message string) {
 	Expect(err).To(HaveOccurred())
 	Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected an Invalid error, got %v", err)
+	Expect(err).To(MatchError(ContainSubstring(message)))
 }
 
 var _ = Describe("Model API contract", func() {
 	ctx := context.Background()
 
-	DescribeTable("accepts supported namespaced model sources",
-		func(name string, spec map[string]any) {
-			object := modelObject("Model", name, "default", spec)
-			Expect(k8sClient.Create(ctx, object)).To(Succeed())
-			DeferCleanup(func() {
-				_ = k8sClient.Delete(ctx, object)
-			})
+	DescribeTable("accepts supported source URIs",
+		func(name, uri string) {
+			createModel(ctx, modelObject("Model", name, "default", sourceSpec(uri)))
 		},
-		Entry("Hugging Face", "model-valid-hf", hfModelSpec()),
-		Entry("Hugging Face with credentials", "model-valid-hf-credentials", map[string]any{
-			"source": map[string]any{
-				"uri":            "hf://Qwen/Qwen3-8B",
-				"revision":       fullRevision,
-				"credentialsRef": map[string]any{"name": "huggingface-token"},
-			},
-		}),
-		Entry("S3", "model-valid-s3", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3://team-a-models/base/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("OCI", "model-valid-oci", map[string]any{
-			"source": map[string]any{
-				"uri": "oci://registry.example.com/models/qwen3-8b@" + ociDigest,
-			},
-		}),
+		Entry("Hugging Face without a revision", "uri-hf", hfModelURI),
+		Entry("Hugging Face branch", "uri-hf-branch", hfModelURI+"@main"),
+		Entry("Hugging Face commit SHA", "uri-hf-commit", hfModelURI+"@"+commitSHA),
+		Entry("Hugging Face ref with slashes", "uri-hf-ref", hfModelURI+"@refs/pr/1"),
+		Entry("S3", "uri-s3", "s3://team-a-models/base/qwen3-8b"),
+		Entry("S3 key with an encoded space", "uri-s3-encoded", "s3://team-a-models/base/qwen3%208b"),
+		Entry("OCI without a version", "uri-oci", ociModelURI),
+		Entry("OCI tag", "uri-oci-tag", ociModelURI+":v1"),
+		Entry("OCI digest", "uri-oci-digest", ociModelURI+"@"+ociDigest),
+		Entry("OCI registry with a port", "uri-oci-port", "oci://localhost:5000/qwen3-8b:v1"),
 	)
 
-	DescribeTable("rejects invalid namespaced model declarations",
-		func(name string, spec map[string]any) {
-			expectInvalidModel(ctx, modelObject("Model", name, "default", spec))
+	DescribeTable("rejects invalid source URIs",
+		func(name, uri, message string) {
+			object := modelObject("Model", name, "default", sourceSpec(uri))
+			expectInvalid(k8sClient.Create(ctx, object), message)
 		},
-		Entry("missing source", "model-missing-source", map[string]any{}),
-		Entry("empty URI", "model-empty-uri", map[string]any{
-			"source": map[string]any{"uri": ""},
-		}),
-		Entry("unsupported scheme", "model-unsupported-scheme", map[string]any{
-			"source": map[string]any{"uri": "https://example.com/model"},
-		}),
-		Entry("unsupported pvc scheme", "model-unsupported-pvc", map[string]any{
-			"source": map[string]any{
-				"uri":    "pvc://qwen3-weights/models/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("uppercase scheme", "model-uppercase-scheme", map[string]any{
-			"source": map[string]any{
-				"uri":      "HF://Qwen/Qwen3-8B",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("Hugging Face URI without owner", "model-hf-no-owner", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf:///Qwen3-8B",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("Hugging Face URI with whitespace", "model-hf-whitespace", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf://Qwen Team/Qwen3-8B",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("missing Hugging Face revision", "model-hf-no-revision", map[string]any{
-			"source": map[string]any{"uri": "hf://Qwen/Qwen3-8B"},
-		}),
-		Entry("short Hugging Face revision", "model-hf-short-revision", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf://Qwen/Qwen3-8B",
-				"revision": "main",
-			},
-		}),
-		Entry("missing S3 digest", "model-s3-no-digest", map[string]any{
-			"source": map[string]any{"uri": "s3://team-a-models/base/qwen3-8b"},
-		}),
-		Entry("S3 URI without bucket", "model-s3-no-bucket", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3:///base/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("S3 URI with whitespace", "model-s3-whitespace", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3://team a-models/base/qwen3-8b",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("S3 URI without prefix", "model-s3-no-prefix", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3://team-a-models",
-				"digest": modelDigest,
-			},
-		}),
-		Entry("malformed digest", "model-bad-digest", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3://team-a-models/base/qwen3-8b",
-				"digest": "sha256:ABC",
-			},
-		}),
-		Entry("OCI URI without descriptor digest", "model-oci-no-descriptor", map[string]any{
-			"source": map[string]any{"uri": "oci://registry.example.com/models/qwen3-8b"},
-		}),
-		Entry("OCI URI without artifact", "model-oci-no-artifact", map[string]any{
-			"source": map[string]any{"uri": "oci://registry.example.com/@" + ociDigest},
-		}),
-		Entry("OCI URI with whitespace", "model-oci-whitespace", map[string]any{
-			"source": map[string]any{"uri": "oci://registry.example.com/models/qwen 3@" + ociDigest},
-		}),
-		Entry("empty credential name", "model-empty-credential", map[string]any{
-			"source": map[string]any{
-				"uri":            "hf://Qwen/Qwen3-8B",
-				"revision":       fullRevision,
-				"credentialsRef": map[string]any{"name": ""},
-			},
-		}),
-		Entry("invalid credential name", "model-invalid-credential", map[string]any{
-			"source": map[string]any{
-				"uri":            "hf://Qwen/Qwen3-8B",
-				"revision":       fullRevision,
-				"credentialsRef": map[string]any{"name": "Not Valid"},
-			},
-		}),
-		Entry("overlong credential name", "model-overlong-credential", map[string]any{
-			"source": map[string]any{
-				"uri":            "hf://Qwen/Qwen3-8B",
-				"revision":       fullRevision,
-				"credentialsRef": map[string]any{"name": strings.Repeat("a", 254)},
-			},
-		}),
-		Entry("query string", "model-query", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf://Qwen/Qwen3-8B?revision=main",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("fragment", "model-fragment", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf://Qwen/Qwen3-8B#weights",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("dot path segment", "model-dot-segment", map[string]any{
-			"source": map[string]any{
-				"uri":      "hf://Qwen/../Qwen3-8B",
-				"revision": fullRevision,
-			},
-		}),
-		Entry("missing LoRA base model reference", "model-lora-no-ref", map[string]any{
-			"source": hfModelSpec()["source"],
+		Entry("empty", "bad-uri-empty", "", "spec.source.uri"),
+		Entry("too long", "bad-uri-long", "s3://team-a-models/"+strings.Repeat("a", 2048), "spec.source.uri"),
+		Entry("unsupported scheme", "bad-uri-https", "https://example.com/model", msgScheme),
+		Entry("pvc scheme", "bad-uri-pvc", "pvc://qwen3-weights/models/qwen3-8b", msgScheme),
+		Entry("uppercase scheme", "bad-uri-uppercase", "HF://Qwen/Qwen3-8B", msgScheme),
+		Entry("whitespace", "bad-uri-space", "hf://Qwen Team/Qwen3-8B", msgCharacters),
+		Entry("query string", "bad-uri-query", hfModelURI+"?revision=main", msgQuery),
+		Entry("fragment", "bad-uri-fragment", hfModelURI+"#weights", msgQuery),
+		Entry("dot path segment", "bad-uri-dots", "s3://team-a-models/base/../qwen3-8b", msgDotSegments),
+		Entry("encoded dot segment", "bad-uri-encoded-dots", "s3://team-a-models/base/%2e%2e/qwen3-8b", msgPercent),
+		Entry("encoded slash", "bad-uri-encoded-slash", "s3://team-a-models/base%2Fqwen3-8b", msgPercent),
+		Entry("Hugging Face without owner", "bad-hf-owner", "hf:///Qwen3-8B", msgHF),
+		Entry("Hugging Face with an extra path", "bad-hf-path", hfModelURI+"/extra", msgHF),
+		Entry("Hugging Face with credentials", "bad-hf-credentials", "hf://user:token@Qwen/Qwen3-8B", msgHF),
+		Entry("Hugging Face with an empty revision", "bad-hf-empty-revision", hfModelURI+"@", msgHF),
+		Entry("Hugging Face revision with ..", "bad-hf-revision", hfModelURI+"@v1..v2", msgHF),
+		Entry("S3 without bucket", "bad-s3-bucket", "s3:///base/qwen3-8b", msgS3),
+		Entry("S3 without prefix", "bad-s3-prefix", "s3://team-a-models", msgS3),
+		Entry("S3 with a trailing slash", "bad-s3-slash", "s3://team-a-models/base/qwen3-8b/", msgS3),
+		Entry("S3 with credentials", "bad-s3-credentials", "s3://key:secret@team-a-models/base/qwen3-8b", msgS3),
+		Entry("OCI without repository", "bad-oci-repository", "oci://registry.example.com", msgOCI),
+		Entry("OCI with credentials", "bad-oci-credentials", "oci://user:pass@registry.example.com/qwen3-8b:v1", msgOCI),
+		Entry("OCI uppercase repository", "bad-oci-uppercase", "oci://registry.example.com/Models/Qwen3-8B:v1", msgOCI),
+		Entry("OCI tag and digest", "bad-oci-tag-digest", ociModelURI+":v1@"+ociDigest, msgOCI),
+		Entry("OCI short digest", "bad-oci-digest", ociModelURI+"@sha256:abc", msgOCI),
+	)
+
+	DescribeTable("accepts credentials and prefetch",
+		func(name string, spec map[string]any) {
+			createModel(ctx, modelObject("Model", name, "default", spec))
+		},
+		Entry("credentials", "spec-credentials", credentialsSpec(map[string]any{"name": "huggingface-token"})),
+		Entry("prefetch to every node", "spec-prefetch-all", prefetchSpec(map[string]any{})),
+		Entry("prefetch by node selector", "spec-prefetch-selector", prefetchSpec(map[string]any{
+			"nodeSelector": map[string]any{"node.kubernetes.io/instance-type": "gpu-h100"},
+		})),
+		Entry("prefetch by node name", "spec-prefetch-node", prefetchSpec(map[string]any{"nodeName": "gpu-node-1"})),
+	)
+
+	DescribeTable("rejects invalid model declarations",
+		func(name string, spec map[string]any, message string) {
+			expectInvalid(k8sClient.Create(ctx, modelObject("Model", name, "default", spec)), message)
+		},
+		Entry("missing source", "bad-spec-source", map[string]any{}, "spec.source"),
+		Entry("credentials without a name", "bad-credentials-missing",
+			credentialsSpec(map[string]any{}), "spec.source.credentialsRef.name"),
+		Entry("empty credential name", "bad-credentials-empty",
+			credentialsSpec(map[string]any{"name": ""}), "spec.source.credentialsRef.name"),
+		Entry("invalid credential name", "bad-credentials-invalid",
+			credentialsSpec(map[string]any{"name": "Not Valid"}), "spec.source.credentialsRef.name"),
+		Entry("overlong credential name", "bad-credentials-long",
+			credentialsSpec(map[string]any{"name": strings.Repeat("a", 254)}), "spec.source.credentialsRef.name"),
+		Entry("prefetch with nodeSelector and nodeName", "bad-prefetch-both", prefetchSpec(map[string]any{
+			"nodeSelector": map[string]any{"node.kubernetes.io/instance-type": "gpu-h100"},
+			"nodeName":     "gpu-node-1",
+		}), "nodeSelector and nodeName are mutually exclusive"),
+		Entry("prefetch with an empty nodeSelector", "bad-prefetch-selector",
+			prefetchSpec(map[string]any{"nodeSelector": map[string]any{}}), "spec.prefetch.nodeSelector"),
+		Entry("prefetch with an invalid nodeName", "bad-prefetch-node",
+			prefetchSpec(map[string]any{"nodeName": "Not Valid"}), "spec.prefetch.nodeName"),
+		Entry("missing LoRA base model reference", "bad-lora-missing", map[string]any{
+			"source": map[string]any{"uri": s3AdapterURI},
 			"lora":   map[string]any{},
-		}),
-		Entry("invalid LoRA reference kind", "model-lora-kind", map[string]any{
-			"source": hfModelSpec()["source"],
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "InferenceService",
-					"name": "qwen3-8b",
-				},
-			},
-		}),
-		Entry("empty LoRA reference name", "model-lora-name", map[string]any{
-			"source": hfModelSpec()["source"],
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "Model",
-					"name": "",
-				},
-			},
-		}),
-		Entry("invalid LoRA reference name", "model-lora-invalid-name", map[string]any{
-			"source": hfModelSpec()["source"],
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "Model",
-					"name": "not/a/name",
-				},
-			},
-		}),
-		Entry("overlong LoRA reference name", "model-lora-long-name", map[string]any{
-			"source": hfModelSpec()["source"],
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "Model",
-					"name": strings.Repeat("a", 254),
-				},
-			},
-		}),
+		}, "spec.lora.baseModelRef"),
+		Entry("invalid LoRA reference kind", "bad-lora-kind",
+			loraSpec(map[string]any{"kind": "InferenceService", "name": "qwen3-8b"}), "spec.lora.baseModelRef.kind"),
+		Entry("empty LoRA reference name", "bad-lora-empty",
+			loraSpec(map[string]any{"kind": "Model", "name": ""}), "spec.lora.baseModelRef.name"),
+		Entry("invalid LoRA reference name", "bad-lora-invalid",
+			loraSpec(map[string]any{"kind": "Model", "name": "not/a/name"}), "spec.lora.baseModelRef.name"),
+		Entry("overlong LoRA reference name", "bad-lora-long",
+			loraSpec(map[string]any{"kind": "Model", "name": strings.Repeat("a", 254)}), "spec.lora.baseModelRef.name"),
 	)
 
 	DescribeTable("accepts namespaced LoRA references",
 		func(name, kind string) {
-			object := modelObject("Model", name, "default", map[string]any{
-				"source": map[string]any{
-					"uri":    "s3://team-a-models/adapters/qwen3-8b-finance",
-					"digest": modelDigest,
-				},
-				"lora": map[string]any{
-					"baseModelRef": map[string]any{
-						"kind": kind,
-						"name": "qwen3-8b",
-					},
-				},
-			})
-			Expect(k8sClient.Create(ctx, object)).To(Succeed())
-			DeferCleanup(func() {
-				_ = k8sClient.Delete(ctx, object)
-			})
+			createModel(ctx, modelObject("Model", name, "default", loraSpec(map[string]any{
+				"kind": kind,
+				"name": "qwen3-8b",
+			})))
 		},
-		Entry("Model", "model-valid-lora-model-ref", "Model"),
-		Entry("ClusterModel", "model-valid-lora-cluster-ref", "ClusterModel"),
+		Entry("Model", "lora-model-ref", "Model"),
+		Entry("ClusterModel", "lora-cluster-ref", "ClusterModel"),
 	)
 
-	It("enforces cluster-scoped LoRA reference rules", func() {
-		base := modelObject("ClusterModel", "cluster-model-valid", "", hfModelSpec())
-		Expect(k8sClient.Create(ctx, base)).To(Succeed())
-		DeferCleanup(func() {
-			_ = k8sClient.Delete(ctx, base)
-		})
+	It("requires cluster-scoped LoRA artifacts to reference a ClusterModel", func() {
+		createModel(ctx, modelObject("ClusterModel", "cluster-lora-cluster-ref", "", loraSpec(map[string]any{
+			"kind": "ClusterModel",
+			"name": "qwen3-8b",
+		})))
 
-		lora := modelObject("ClusterModel", "cluster-model-valid-lora", "", map[string]any{
-			"source": map[string]any{
-				"uri":    "s3://team-a-models/adapters/qwen3-8b-finance",
-				"digest": modelDigest,
-			},
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "ClusterModel",
-					"name": "qwen3-8b",
-				},
-			},
-		})
-		Expect(k8sClient.Create(ctx, lora)).To(Succeed())
-		DeferCleanup(func() {
-			_ = k8sClient.Delete(ctx, lora)
-		})
-
-		expectInvalidModel(ctx, modelObject("ClusterModel", "cluster-model-lora-model-ref", "", map[string]any{
-			"source": hfModelSpec()["source"],
-			"lora": map[string]any{
-				"baseModelRef": map[string]any{
-					"kind": "Model",
-					"name": "qwen3-8b",
-				},
-			},
+		object := modelObject("ClusterModel", "cluster-lora-model-ref", "", loraSpec(map[string]any{
+			"kind": "Model",
+			"name": "qwen3-8b",
 		}))
+		expectInvalid(k8sClient.Create(ctx, object), "cluster-scoped LoRA artifacts must reference a ClusterModel")
 	})
 
-	DescribeTable("makes the spec immutable while allowing metadata updates",
+	DescribeTable("allows credential and prefetch updates while keeping uri and lora immutable",
 		func(kind, namespace string) {
-			object := modelObject(kind, "immutable-"+strings.ToLower(kind), namespace, hfModelSpec())
-			Expect(k8sClient.Create(ctx, object)).To(Succeed())
-			DeferCleanup(func() {
-				_ = k8sClient.Delete(ctx, object)
-			})
+			suffix := strings.ToLower(kind)
+			baseRef := map[string]any{"kind": "ClusterModel", "name": "qwen3-8b"}
+			base := modelObject(kind, "update-base-"+suffix, namespace, sourceSpec(hfModelURI))
+			createModel(ctx, base)
+			adapter := modelObject(kind, "update-lora-"+suffix, namespace, loraSpec(baseRef))
+			createModel(ctx, adapter)
 
-			object.SetAnnotations(map[string]string{"fusioninfer.io/test": "metadata-update"})
-			Expect(k8sClient.Update(ctx, object)).To(Succeed())
+			Expect(updateModel(ctx, base, func(object *unstructured.Unstructured) {
+				object.SetAnnotations(map[string]string{"fusioninfer.io/test": "metadata-update"})
+			})).To(Succeed())
+			Expect(updateModel(ctx, base, setField(map[string]any{"name": "huggingface-token"},
+				"spec", "source", "credentialsRef"))).To(Succeed())
+			Expect(updateModel(ctx, base, setField(map[string]any{"nodeName": "gpu-node-1"},
+				"spec", "prefetch"))).To(Succeed())
+			Expect(updateModel(ctx, base, removeField("spec", "prefetch"))).To(Succeed())
 
-			Expect(unstructured.SetNestedField(
-				object.Object,
-				"89abcdef0123456789abcdef0123456789abcdef",
-				"spec",
-				"source",
-				"revision",
-			)).To(Succeed())
-			err := k8sClient.Update(ctx, object)
-			Expect(err).To(HaveOccurred())
-			Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected an Invalid error, got %v", err)
+			expectInvalid(updateModel(ctx, base, setField(hfModelURI+"@main", "spec", "source", "uri")),
+				"uri is immutable")
+			expectInvalid(updateModel(ctx, base, setField(map[string]any{"baseModelRef": baseRef}, "spec", "lora")),
+				"lora cannot be added or removed")
+			expectInvalid(updateModel(ctx, adapter, setField("qwen3-14b", "spec", "lora", "baseModelRef", "name")),
+				"lora is immutable")
+			expectInvalid(updateModel(ctx, adapter, removeField("spec", "lora")),
+				"lora cannot be added or removed")
 		},
 		Entry("Model", "Model", "default"),
 		Entry("ClusterModel", "ClusterModel", ""),
 	)
 
-	It("rejects an empty spec from an unstructured client", func() {
+	It("updates status only through the status subresource", func() {
+		model := &fusioninferiov1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "model-status", Namespace: "default"},
+			Spec: fusioninferiov1alpha1.ModelSpec{
+				Source:   fusioninferiov1alpha1.ModelSource{URI: hfModelURI},
+				Prefetch: &fusioninferiov1alpha1.PrefetchSpec{},
+			},
+		}
+		Expect(k8sClient.Create(ctx, model)).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, model)
+		})
+
+		model.Status.ObservedGeneration = model.Generation
+		model.Status.Prefetch = &fusioninferiov1alpha1.PrefetchStatus{DesiredNodes: 4, ReadyNodes: 3, FailedNodes: 1}
+		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+			Type:    fusioninferiov1alpha1.ModelConditionAccessible,
+			Status:  metav1.ConditionTrue,
+			Reason:  fusioninferiov1alpha1.ModelReasonVerified,
+			Message: "source is accessible",
+		})
+		Expect(k8sClient.Status().Update(ctx, model)).To(Succeed())
+
+		stored := &fusioninferiov1alpha1.Model{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(model), stored)).To(Succeed())
+		Expect(stored.Status.Prefetch).To(Equal(model.Status.Prefetch))
+		Expect(meta.IsStatusConditionTrue(stored.Status.Conditions, fusioninferiov1alpha1.ModelConditionAccessible)).
+			To(BeTrue())
+
+		stored.Status = fusioninferiov1alpha1.ModelStatus{}
+		stored.Annotations = map[string]string{"fusioninfer.io/test": "status-preserved"}
+		Expect(k8sClient.Update(ctx, stored)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(model), stored)).To(Succeed())
+		Expect(stored.Status.Prefetch).To(Equal(model.Status.Prefetch))
+
+		stored.Status.Prefetch.ReadyNodes = -1
+		expectInvalid(k8sClient.Status().Update(ctx, stored), "status.prefetch.readyNodes")
+	})
+
+	It("rejects an object without a spec", func() {
 		object := &unstructured.Unstructured{}
 		object.SetAPIVersion(modelAPIVersion)
 		object.SetKind("Model")
 		object.SetName("model-no-spec")
 		object.SetNamespace("default")
 
-		expectInvalidModel(ctx, object)
+		expectInvalid(k8sClient.Create(ctx, object), "spec")
 	})
 })

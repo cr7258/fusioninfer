@@ -8,4 +8,3 @@ metadata:
 spec:
   source:
     uri: hf://Qwen/Qwen3-14B
-    revision: 89abcdef0123456789abcdef0123456789abcdef

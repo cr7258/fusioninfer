@@ -39,6 +39,8 @@ type ModelsGetter interface {
 type ModelInterface interface {
 	Create(ctx context.Context, model *corev1alpha1.Model, opts v1.CreateOptions) (*corev1alpha1.Model, error)
 	Update(ctx context.Context, model *corev1alpha1.Model, opts v1.UpdateOptions) (*corev1alpha1.Model, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+	UpdateStatus(ctx context.Context, model *corev1alpha1.Model, opts v1.UpdateOptions) (*corev1alpha1.Model, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*corev1alpha1.Model, error)
@@ -46,6 +48,8 @@ type ModelInterface interface {
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1alpha1.Model, err error)
 	Apply(ctx context.Context, model *applyconfigurationcorev1alpha1.ModelApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.Model, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+	ApplyStatus(ctx context.Context, model *applyconfigurationcorev1alpha1.ModelApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.Model, err error)
 	ModelExpansion
 }
 

@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Model is a namespaced immutable model artifact declaration.
+        description: Model declares a namespaced model artifact.
         properties:
           apiVersion:
             description: |-
@@ -40,8 +40,8 @@ spec:
             description: Spec declares the model artifact.
             properties:
               lora:
-                description: LoRA identifies this artifact as a LoRA and names its
-                  base model.
+                description: LoRA identifies this artifact as a LoRA adapter and names
+                  its Base Model.
                 properties:
                   baseModelRef:
                     description: BaseModelRef identifies the compatible base model.
@@ -65,75 +65,190 @@ spec:
                 required:
                 - baseModelRef
                 type: object
+                x-kubernetes-validations:
+                - message: lora is immutable
+                  rule: self == oldSelf
+              prefetch:
+                description: |-
+                  Prefetch declares the nodes to download the model to before it is needed.
+                  When omitted, the model is downloaded on demand.
+                properties:
+                  nodeName:
+                    description: NodeName selects a single node by name.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: NodeSelector selects the nodes whose labels match
+                      all of the given labels.
+                    minProperties: 1
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: nodeSelector and nodeName are mutually exclusive
+                  rule: '!(has(self.nodeSelector) && has(self.nodeName))'
               source:
-                description: Source identifies the immutable model artifact.
+                description: Source identifies where the model artifact is stored.
                 properties:
                   credentialsRef:
-                    description: CredentialsRef names a Secret used to access the
-                      source.
+                    description: |-
+                      CredentialsRef names the Secret used to access the source.
+                      When omitted, the source is accessed anonymously.
                     properties:
                       name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        description: Name is the name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                         type: string
+                    required:
+                    - name
                     type: object
-                    x-kubernetes-map-type: atomic
-                  digest:
-                    description: Digest verifies artifact content.
-                    pattern: ^sha256:[0-9a-f]{64}$
-                    type: string
-                  revision:
-                    description: Revision is the full commit SHA for a Hugging Face
-                      source.
-                    pattern: ^[0-9a-f]{40}$
-                    type: string
                   uri:
-                    description: URI is the model artifact location.
+                    description: |-
+                      URI is the model artifact location. The version, when present, is part of the URI:
+                      hf://<owner>/<repo>[@<revision>], s3://<bucket>/<prefix>, or
+                      oci://<registry>/<repository>[:<tag>|@sha256:<digest>].
+                    maxLength: 2048
                     minLength: 1
                     type: string
+                    x-kubernetes-validations:
+                    - message: uri is immutable
+                      rule: self == oldSelf
+                    - message: uri must use a supported lowercase scheme and identify
+                        an artifact
+                      rule: self.matches('^(hf|s3|oci)://.+$')
+                    - message: uri must use valid URI characters; encode spaces and
+                        non-ASCII characters
+                      rule: self.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')
+                    - message: uri must not contain a query string or fragment
+                      rule: '!self.contains(''?'') && !self.contains(''#'')'
+                    - message: uri must not contain dot path segments
+                      rule: '!self.contains(''/./'') && !self.contains(''/../'') &&
+                        !self.endsWith(''/.'') && !self.endsWith(''/..'')'
+                    - message: uri must not percent-encode dots or slashes
+                      rule: '!self.matches(''%2[eEfF]'')'
+                    - message: hf uri must be hf://<owner>/<repo> with an optional
+                        @<revision>
+                      rule: '!self.startsWith(''hf://'') || (self.matches(''^hf://[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?/[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?(@[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)?$'')
+                        && !self.contains(''..''))'
+                    - message: s3 uri must be s3://<bucket>/<prefix>
+                      rule: '!self.startsWith(''s3://'') || self.matches(''^s3://[^/@:]+/[^/]+(/[^/]+)*$'')'
+                    - message: oci uri must be oci://<registry>/<repository> with
+                        an optional :<tag> or @sha256:<digest>
+                      rule: '!self.startsWith(''oci://'') || self.matches(''^oci://[A-Za-z0-9.-]+(:[0-9]+)?/[a-z0-9]+(([.]|__|_|-+)[a-z0-9]+)*(/[a-z0-9]+(([.]|__|_|-+)[a-z0-9]+)*)*(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127}|@sha256:[0-9a-f]{64})?$'')'
                 required:
                 - uri
                 type: object
-                x-kubernetes-validations:
-                - message: uri must use a supported lowercase scheme and identify
-                    an artifact
-                  rule: self.uri.matches('^(hf|s3|oci)://.+$')
-                - message: uri must use valid URI characters; encode spaces and non-ASCII
-                    characters
-                  rule: self.uri.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')
-                - message: hf uri must identify a repository as hf://<owner>/<name>
-                  rule: '!self.uri.startsWith(''hf://'') || self.uri.matches(''^hf://[^/?#]+/[^/?#]+$'')'
-                - message: s3 uri must identify a bucket and prefix
-                  rule: '!self.uri.startsWith(''s3://'') || self.uri.matches(''^s3://[^/?#]+/[^/?#]+(/[^/?#]+)*$'')'
-                - message: uri must not contain a query string or fragment
-                  rule: '!self.uri.contains(''?'') && !self.uri.contains(''#'')'
-                - message: uri must not contain dot path segments
-                  rule: '!self.uri.contains(''/./'') && !self.uri.contains(''/../'')
-                    && !self.uri.endsWith(''/.'') && !self.uri.endsWith(''/..'')'
-                - message: hf sources require a full lowercase commit SHA revision
-                  rule: '!self.uri.startsWith(''hf://'') || (has(self.revision) &&
-                    self.revision.matches(''^[0-9a-f]{40}$''))'
-                - message: s3 sources require a digest
-                  rule: '!self.uri.startsWith(''s3://'') || has(self.digest)'
-                - message: oci uri must identify an artifact and include its descriptor
-                    digest
-                  rule: '!self.uri.startsWith(''oci://'') || self.uri.matches(''^oci://[^/?#]+/[^/?#@]+(/[^/?#@]+)*@sha256:[0-9a-f]{64}$'')'
-                - message: credentialsRef.name must be a valid Kubernetes object name
-                  rule: '!has(self.credentialsRef) || (has(self.credentialsRef.name)
-                    && size(self.credentialsRef.name) <= 253 && self.credentialsRef.name.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$''))'
             required:
             - source
             type: object
             x-kubernetes-validations:
-            - message: spec is immutable
-              rule: self == oldSelf
+            - message: lora cannot be added or removed
+              rule: has(self.lora) == has(oldSelf.lora)
+          status:
+            description: Status reports source accessibility and prefetch progress.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the model's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              prefetch:
+                description: Prefetch reports download progress on the nodes selected
+                  by spec.prefetch.
+                properties:
+                  desiredNodes:
+                    description: DesiredNodes is the number of nodes selected by prefetch.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  failedNodes:
+                    description: FailedNodes is the number of selected nodes that
+                      failed to download the model.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  readyNodes:
+                    description: ReadyNodes is the number of selected nodes that have
+                      downloaded the model.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                required:
+                - desiredNodes
+                - failedNodes
+                - readyNodes
+                type: object
+            type: object
         required:
         - spec
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

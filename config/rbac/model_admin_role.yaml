@@ -19,3 +19,9 @@ rules:
   - models
   verbs:
   - '*'
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - models/status
+  verbs:
+  - get

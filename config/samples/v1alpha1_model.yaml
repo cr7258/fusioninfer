@@ -8,5 +8,4 @@ metadata:
   namespace: default
 spec:
   source:
-    uri: hf://Qwen/Qwen3-8B
-    revision: 0123456789abcdef0123456789abcdef01234567
+    uri: hf://Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218

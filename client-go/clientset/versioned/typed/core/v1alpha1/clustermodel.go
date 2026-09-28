@@ -39,6 +39,8 @@ type ClusterModelsGetter interface {
 type ClusterModelInterface interface {
 	Create(ctx context.Context, clusterModel *corev1alpha1.ClusterModel, opts v1.CreateOptions) (*corev1alpha1.ClusterModel, error)
 	Update(ctx context.Context, clusterModel *corev1alpha1.ClusterModel, opts v1.UpdateOptions) (*corev1alpha1.ClusterModel, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+	UpdateStatus(ctx context.Context, clusterModel *corev1alpha1.ClusterModel, opts v1.UpdateOptions) (*corev1alpha1.ClusterModel, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*corev1alpha1.ClusterModel, error)
@@ -46,6 +48,8 @@ type ClusterModelInterface interface {
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1alpha1.ClusterModel, err error)
 	Apply(ctx context.Context, clusterModel *applyconfigurationcorev1alpha1.ClusterModelApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.ClusterModel, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+	ApplyStatus(ctx context.Context, clusterModel *applyconfigurationcorev1alpha1.ClusterModelApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.ClusterModel, err error)
 	ClusterModelExpansion
 }
 

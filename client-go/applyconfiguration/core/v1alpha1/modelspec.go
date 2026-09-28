@@ -20,8 +20,9 @@ package v1alpha1
 // ModelSpecApplyConfiguration represents a declarative configuration of the ModelSpec type for use
 // with apply.
 type ModelSpecApplyConfiguration struct {
-	Source *ModelSourceApplyConfiguration      `json:"source,omitempty"`
-	LoRA   *LoRAArtifactSpecApplyConfiguration `json:"lora,omitempty"`
+	Source   *ModelSourceApplyConfiguration      `json:"source,omitempty"`
+	LoRA     *LoRAArtifactSpecApplyConfiguration `json:"lora,omitempty"`
+	Prefetch *PrefetchSpecApplyConfiguration     `json:"prefetch,omitempty"`
 }
 
 // ModelSpecApplyConfiguration constructs a declarative configuration of the ModelSpec type for use with
@@ -43,5 +44,13 @@ func (b *ModelSpecApplyConfiguration) WithSource(value *ModelSourceApplyConfigur
 // If called multiple times, the LoRA field is set to the value of the last call.
 func (b *ModelSpecApplyConfiguration) WithLoRA(value *LoRAArtifactSpecApplyConfiguration) *ModelSpecApplyConfiguration {
 	b.LoRA = value
+	return b
+}
+
+// WithPrefetch sets the Prefetch field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Prefetch field is set to the value of the last call.
+func (b *ModelSpecApplyConfiguration) WithPrefetch(value *PrefetchSpecApplyConfiguration) *ModelSpecApplyConfiguration {
+	b.Prefetch = value
 	return b
 }

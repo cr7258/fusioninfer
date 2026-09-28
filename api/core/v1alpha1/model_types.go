@@ -17,52 +17,89 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ModelSpec declares an immutable model artifact.
-// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
+// Condition types reported in Model and ClusterModel status.
+const (
+	// ModelConditionAccessible reports whether the source can be accessed with the configured credentials.
+	ModelConditionAccessible = "Accessible"
+
+	// ModelConditionPrefetched reports whether every node selected by prefetch has downloaded the model.
+	ModelConditionPrefetched = "Prefetched"
+)
+
+// Condition reasons reported in Model and ClusterModel status.
+const (
+	// ModelReasonVerified means the source was accessed successfully.
+	ModelReasonVerified = "Verified"
+
+	// ModelReasonAuthenticationFailed means the source rejected the configured credentials.
+	ModelReasonAuthenticationFailed = "AuthenticationFailed"
+
+	// ModelReasonNotFound means the source or the referenced Secret does not exist.
+	ModelReasonNotFound = "NotFound"
+
+	// ModelReasonUnreachable means the source could not be reached.
+	ModelReasonUnreachable = "Unreachable"
+
+	// ModelReasonDownloadFailed means at least one node selected by prefetch failed to download the model.
+	ModelReasonDownloadFailed = "DownloadFailed"
+)
+
+// ModelSpec declares a model artifact and the nodes to prefetch it to.
+// +kubebuilder:validation:XValidation:rule="has(self.lora) == has(oldSelf.lora)",message="lora cannot be added or removed"
 type ModelSpec struct {
-	// Source identifies the immutable model artifact.
+	// Source identifies where the model artifact is stored.
 	// +required
 	Source ModelSource `json:"source"`
 
-	// LoRA identifies this artifact as a LoRA and names its base model.
+	// LoRA identifies this artifact as a LoRA adapter and names its Base Model.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="lora is immutable"
 	// +optional
 	LoRA *LoRAArtifactSpec `json:"lora,omitempty"`
+
+	// Prefetch declares the nodes to download the model to before it is needed.
+	// When omitted, the model is downloaded on demand.
+	// +optional
+	Prefetch *PrefetchSpec `json:"prefetch,omitempty"`
 }
 
-// ModelSource identifies the storage location and immutable version of a model artifact.
-// +kubebuilder:validation:XValidation:rule="self.uri.matches('^(hf|s3|oci)://.+$')",message="uri must use a supported lowercase scheme and identify an artifact"
-// +kubebuilder:validation:XValidation:rule="self.uri.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')",message="uri must use valid URI characters; encode spaces and non-ASCII characters"
-// +kubebuilder:validation:XValidation:rule="!self.uri.startsWith('hf://') || self.uri.matches('^hf://[^/?#]+/[^/?#]+$')",message="hf uri must identify a repository as hf://<owner>/<name>"
-// +kubebuilder:validation:XValidation:rule="!self.uri.startsWith('s3://') || self.uri.matches('^s3://[^/?#]+/[^/?#]+(/[^/?#]+)*$')",message="s3 uri must identify a bucket and prefix"
-// +kubebuilder:validation:XValidation:rule="!self.uri.contains('?') && !self.uri.contains('#')",message="uri must not contain a query string or fragment"
-// +kubebuilder:validation:XValidation:rule="!self.uri.contains('/./') && !self.uri.contains('/../') && !self.uri.endsWith('/.') && !self.uri.endsWith('/..')",message="uri must not contain dot path segments"
-// +kubebuilder:validation:XValidation:rule="!self.uri.startsWith('hf://') || (has(self.revision) && self.revision.matches('^[0-9a-f]{40}$'))",message="hf sources require a full lowercase commit SHA revision"
-// +kubebuilder:validation:XValidation:rule="!self.uri.startsWith('s3://') || has(self.digest)",message="s3 sources require a digest"
-// +kubebuilder:validation:XValidation:rule="!self.uri.startsWith('oci://') || self.uri.matches('^oci://[^/?#]+/[^/?#@]+(/[^/?#@]+)*@sha256:[0-9a-f]{64}$')",message="oci uri must identify an artifact and include its descriptor digest"
-// +kubebuilder:validation:XValidation:rule="!has(self.credentialsRef) || (has(self.credentialsRef.name) && size(self.credentialsRef.name) <= 253 && self.credentialsRef.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'))",message="credentialsRef.name must be a valid Kubernetes object name"
+// ModelSource declares where a model artifact is stored and the Secret used to access it.
 type ModelSource struct {
-	// URI is the model artifact location.
+	// URI is the model artifact location. The version, when present, is part of the URI:
+	// hf://<owner>/<repo>[@<revision>], s3://<bucket>/<prefix>, or
+	// oci://<registry>/<repository>[:<tag>|@sha256:<digest>].
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="uri is immutable"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^(hf|s3|oci)://.+$')",message="uri must use a supported lowercase scheme and identify an artifact"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')",message="uri must use valid URI characters; encode spaces and non-ASCII characters"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="uri must not contain a query string or fragment"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('/./') && !self.contains('/../') && !self.endsWith('/.') && !self.endsWith('/..')",message="uri must not contain dot path segments"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('%2[eEfF]')",message="uri must not percent-encode dots or slashes"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('hf://') || (self.matches('^hf://[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?/[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?(@[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)?$') && !self.contains('..'))",message="hf uri must be hf://<owner>/<repo> with an optional @<revision>"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('s3://') || self.matches('^s3://[^/@:]+/[^/]+(/[^/]+)*$')",message="s3 uri must be s3://<bucket>/<prefix>"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('oci://') || self.matches('^oci://[A-Za-z0-9.-]+(:[0-9]+)?/[a-z0-9]+(([.]|__|_|-+)[a-z0-9]+)*(/[a-z0-9]+(([.]|__|_|-+)[a-z0-9]+)*)*(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127}|@sha256:[0-9a-f]{64})?$')",message="oci uri must be oci://<registry>/<repository> with an optional :<tag> or @sha256:<digest>"
 	// +required
 	URI string `json:"uri"`
 
-	// Revision is the full commit SHA for a Hugging Face source.
-	// +kubebuilder:validation:Pattern="^[0-9a-f]{40}$"
+	// CredentialsRef names the Secret used to access the source.
+	// When omitted, the source is accessed anonymously.
 	// +optional
-	Revision string `json:"revision,omitempty"`
+	CredentialsRef *SecretReference `json:"credentialsRef,omitempty"`
+}
 
-	// Digest verifies artifact content.
-	// +kubebuilder:validation:Pattern="^sha256:[0-9a-f]{64}$"
-	// +optional
-	Digest string `json:"digest,omitempty"`
-
-	// CredentialsRef names a Secret used to access the source.
-	// +optional
-	CredentialsRef *corev1.LocalObjectReference `json:"credentialsRef,omitempty"`
+// SecretReference names a Secret that holds credentials for a model source.
+// A Model reads the Secret from its own namespace, and a ClusterModel reads it
+// from the FusionInfer system namespace.
+type SecretReference struct {
+	// Name is the name of the Secret.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+	// +required
+	Name string `json:"name"`
 }
 
 // LoRAArtifactSpec declares the base model required by a LoRA artifact.
@@ -87,12 +124,64 @@ type ModelReference struct {
 	Name string `json:"name"`
 }
 
+// PrefetchSpec declares the nodes to download a model to before it is needed.
+// An empty PrefetchSpec selects every node that runs the model agent.
+// +kubebuilder:validation:XValidation:rule="!(has(self.nodeSelector) && has(self.nodeName))",message="nodeSelector and nodeName are mutually exclusive"
+type PrefetchSpec struct {
+	// NodeSelector selects the nodes whose labels match all of the given labels.
+	// +kubebuilder:validation:MinProperties=1
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// NodeName selects a single node by name.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
+}
+
+// ModelStatus reports source accessibility and prefetch progress.
+type ModelStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Prefetch reports download progress on the nodes selected by spec.prefetch.
+	// +optional
+	Prefetch *PrefetchStatus `json:"prefetch,omitempty"`
+
+	// Conditions represent the latest available observations of the model's state.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// PrefetchStatus reports download progress on the nodes selected by prefetch.
+type PrefetchStatus struct {
+	// DesiredNodes is the number of nodes selected by prefetch.
+	// +kubebuilder:validation:Minimum=0
+	// +required
+	DesiredNodes int32 `json:"desiredNodes"`
+
+	// ReadyNodes is the number of selected nodes that have downloaded the model.
+	// +kubebuilder:validation:Minimum=0
+	// +required
+	ReadyNodes int32 `json:"readyNodes"`
+
+	// FailedNodes is the number of selected nodes that failed to download the model.
+	// +kubebuilder:validation:Minimum=0
+	// +required
+	FailedNodes int32 `json:"failedNodes"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:subresource:status
 // +genclient
-// +genclient:noStatus
 
-// Model is a namespaced immutable model artifact declaration.
+// Model declares a namespaced model artifact.
 type Model struct {
 	metav1.TypeMeta `json:",inline"`
 
@@ -103,6 +192,10 @@ type Model struct {
 	// Spec declares the model artifact.
 	// +required
 	Spec ModelSpec `json:"spec"`
+
+	// Status reports source accessibility and prefetch progress.
+	// +optional
+	Status ModelStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
@@ -116,12 +209,12 @@ type ModelList struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
 // +kubebuilder:validation:XValidation:rule="!has(self.spec.lora) || self.spec.lora.baseModelRef.kind == 'ClusterModel'",message="cluster-scoped LoRA artifacts must reference a ClusterModel"
 // +genclient
 // +genclient:nonNamespaced
-// +genclient:noStatus
 
-// ClusterModel is a cluster-scoped immutable model artifact declaration.
+// ClusterModel declares a cluster-scoped model artifact.
 type ClusterModel struct {
 	metav1.TypeMeta `json:",inline"`
 
@@ -132,6 +225,10 @@ type ClusterModel struct {
 	// Spec declares the model artifact.
 	// +required
 	Spec ModelSpec `json:"spec"`
+
+	// Status reports source accessibility and prefetch progress.
+	// +optional
+	Status ModelStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -21,3 +21,9 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - clustermodels/status
+  verbs:
+  - get
