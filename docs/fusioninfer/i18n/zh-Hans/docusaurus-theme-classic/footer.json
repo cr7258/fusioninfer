@@ -29,7 +29,7 @@
   },
   "link.item.label.Developer Guide": {
     "message": "开发者指南",
-    "description": "The label of footer link with label=Developer Guide linking to /docs/developer-guide/clientset-generation"
+    "description": "The label of footer link with label=Developer Guide linking to /docs/developer-guide/code-generation"
   },
   "link.item.label.GitHub": {
     "message": "GitHub",
