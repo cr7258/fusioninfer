@@ -24,7 +24,7 @@ FusionInfer 的 API 类型定义在 `api/core/v1alpha1/*_types.go` 中。DeepCop
 | `config/crd/bases/*.yaml` | controller-gen（`crd`） | `make manifests` |
 | `config/rbac/role.yaml` | controller-gen（`rbac`） | `make manifests` |
 
-`make generate` 先用 controller-gen 生成 DeepCopy，再调用 `hack/update-codegen.sh`，由 Kubernetes [code-generator](https://github.com/kubernetes/code-generator) 生成 `client-go/` 下的代码。`Makefile` 会从 `go.mod` 读取 `k8s.io/api` 的版本，并使用同一版本的 code-generator，升级 `k8s.io/api` 时不需要另外修改。controller-gen 的版本由 `Makefile` 中的 `CONTROLLER_TOOLS_VERSION` 固定。两个工具都会在第一次运行时自动下载。
+`make generate` 先用 controller-gen 生成 DeepCopy，再调用 `hack/update-codegen.sh`，由 Kubernetes [code-generator](https://github.com/kubernetes/code-generator) 生成 `client-go/` 下的代码。`Makefile` 会从 `go.mod` 读取 `k8s.io/api` 的版本，并使用同一版本的 code-generator。controller-gen 的版本由 `Makefile` 中的 `CONTROLLER_TOOLS_VERSION` 固定。两个工具都会在第一次运行时自动下载。
 
 ## 修改 API 后的流程 {#changing-the-api}
 
