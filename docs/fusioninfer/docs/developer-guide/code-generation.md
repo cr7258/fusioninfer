@@ -75,6 +75,7 @@ FusionInfer's controllers use the controller-runtime `client.Client`. Use the ge
 
 ```go
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,33 +84,36 @@ import (
 	clientset "github.com/fusioninfer/fusioninfer/client-go/clientset/versioned"
 )
 
-config, err := rest.InClusterConfig()
-if err != nil {
-	return err
-}
-client, err := clientset.NewForConfig(config)
-if err != nil {
-	return err
-}
+func useTypedClient(ctx context.Context) error {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return err
+	}
+	client, err := clientset.NewForConfig(config)
+	if err != nil {
+		return err
+	}
 
-// Namespaced resources take a namespace.
-model, err := client.FusioninferV1alpha1().Models("team-a").Get(ctx, "qwen3-8b-hf-r1", metav1.GetOptions{})
-if err != nil {
+	// Namespaced resources take a namespace.
+	model, err := client.FusioninferV1alpha1().Models("team-a").Get(ctx, "qwen3-8b-hf-r1", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Cluster-scoped resources don't.
+	clusterModels, err := client.FusioninferV1alpha1().ClusterModels().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, clusterModel := range clusterModels.Items {
+		fmt.Println(clusterModel.Name, clusterModel.Spec.Source.URI)
+	}
+
+	// Status is updated through the status subresource.
+	model.Status.ObservedGeneration = model.Generation
+	_, err = client.FusioninferV1alpha1().Models("team-a").UpdateStatus(ctx, model, metav1.UpdateOptions{})
 	return err
 }
-
-// Cluster-scoped resources don't.
-clusterModels, err := client.FusioninferV1alpha1().ClusterModels().List(ctx, metav1.ListOptions{})
-if err != nil {
-	return err
-}
-for _, clusterModel := range clusterModels.Items {
-	fmt.Println(clusterModel.Name, clusterModel.Spec.Source.URI)
-}
-
-// Status is updated through the status subresource.
-model.Status.ObservedGeneration = model.Generation
-_, err = client.FusioninferV1alpha1().Models("team-a").UpdateStatus(ctx, model, metav1.UpdateOptions{})
 ```
 
 ### Informers and Listers {#informers-and-listers}
@@ -118,26 +122,36 @@ An informer caches resources locally and watches for changes. A lister reads fro
 
 ```go
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
 
+	clientset "github.com/fusioninfer/fusioninfer/client-go/clientset/versioned"
 	informers "github.com/fusioninfer/fusioninfer/client-go/informers/externalversions"
 )
 
-factory := informers.NewSharedInformerFactory(client, 10*time.Minute)
-models := factory.Fusioninfer().V1alpha1().Models().Lister()
-clusterModels := factory.Fusioninfer().V1alpha1().ClusterModels().Lister()
+func readFromCache(ctx context.Context, client clientset.Interface) error {
+	factory := informers.NewSharedInformerFactory(client, 10*time.Minute)
+	models := factory.Fusioninfer().V1alpha1().Models().Lister()
+	clusterModels := factory.Fusioninfer().V1alpha1().ClusterModels().Lister()
 
-// Get the listers before Start so that the factory starts their informers.
-factory.Start(ctx.Done())
-factory.WaitForCacheSync(ctx.Done())
+	// Get the listers before Start so that the factory starts their informers.
+	factory.Start(ctx.Done())
+	factory.WaitForCacheSync(ctx.Done())
 
-model, err := models.Models("team-a").Get("qwen3-8b-hf-r1")
-if err != nil {
-	return err
+	model, err := models.Models("team-a").Get("qwen3-8b-hf-r1")
+	if err != nil {
+		return err
+	}
+	all, err := clusterModels.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+	fmt.Println(model.Name, len(all))
+	return nil
 }
-all, err := clusterModels.List(labels.Everything())
 ```
 
 ### Server-Side Apply {#server-side-apply}
@@ -146,29 +160,35 @@ The types in `client-go/applyconfiguration/` are for Server-Side Apply. All of t
 
 ```go
 import (
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 
 	fusioninferv1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	fusioninferv1alpha1ac "github.com/fusioninfer/fusioninfer/client-go/applyconfiguration/core/v1alpha1"
+	clientset "github.com/fusioninfer/fusioninfer/client-go/clientset/versioned"
 )
 
-status := fusioninferv1alpha1ac.ModelStatus().
-	WithObservedGeneration(model.Generation).
-	WithPrefetch(fusioninferv1alpha1ac.PrefetchStatus().
-		WithDesiredNodes(4).
-		WithReadyNodes(3).
-		WithFailedNodes(1)).
-	WithConditions(metav1ac.Condition().
-		WithType(fusioninferv1alpha1.ModelConditionAccessible).
-		WithStatus(metav1.ConditionTrue).
-		WithReason(fusioninferv1alpha1.ModelReasonVerified).
-		WithMessage("source is accessible").
-		WithLastTransitionTime(metav1.Now()))
+func applyModelStatus(ctx context.Context, client clientset.Interface, model *fusioninferv1alpha1.Model) error {
+	status := fusioninferv1alpha1ac.ModelStatus().
+		WithObservedGeneration(model.Generation).
+		WithPrefetch(fusioninferv1alpha1ac.PrefetchStatus().
+			WithDesiredNodes(4).
+			WithReadyNodes(3).
+			WithFailedNodes(1)).
+		WithConditions(metav1ac.Condition().
+			WithType(fusioninferv1alpha1.ModelConditionAccessible).
+			WithStatus(metav1.ConditionTrue).
+			WithReason(fusioninferv1alpha1.ModelReasonVerified).
+			WithMessage("source is accessible").
+			WithLastTransitionTime(metav1.Now()))
 
-_, err = client.FusioninferV1alpha1().Models("team-a").ApplyStatus(ctx,
-	fusioninferv1alpha1ac.Model("qwen3-8b-hf-r1", "team-a").WithStatus(status),
-	metav1.ApplyOptions{FieldManager: "fusioninfer-controller"})
+	_, err := client.FusioninferV1alpha1().Models(model.Namespace).ApplyStatus(ctx,
+		fusioninferv1alpha1ac.Model(model.Name, model.Namespace).WithStatus(status),
+		metav1.ApplyOptions{FieldManager: "fusioninfer-controller"})
+	return err
+}
 ```
 
 `FieldManager` identifies who owns these fields. When several writers change the same field, the API server uses it to detect conflicts.
