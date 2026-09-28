@@ -58,14 +58,14 @@ Generated code or manifests are not up to date. Run 'make generate manifests' an
 | `+kubebuilder:validation:*`、`+required`、`+optional` | 字段或类型 | 写入 CRD 的 OpenAPI 校验，其中 `XValidation` 生成 [CEL 校验规则](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) |
 | `+kubebuilder:rbac` | 控制器代码 | 生成 `config/rbac/role.yaml` 中控制器需要的权限 |
 
-## 手工维护的文件 {#hand-maintained-files}
+## 脚手架文件 {#scaffolded-files}
 
-下面这些文件按 kubebuilder 的脚手架模板创建，`make generate` 和 `make manifests` 都不会更新它们。新增或修改资源时，需要手工同步：
+新增资源时，`kubebuilder create api` 会按模板生成或更新下面这些文件；不用 kubebuilder 时需要手工补齐。之后 `make generate` 和 `make manifests` 都不会再改动它们。
 
 - `PROJECT`：kubebuilder 的项目配置，记录项目中有哪些资源。
-- `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`：给集群管理员分配权限用的辅助角色，控制器本身不使用。资源开启 status subresource 后，要在这些角色中加上 `<resource>/status` 的 `get` 权限。
+- `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`：给集群管理员分配权限用的辅助角色，控制器本身不使用。模板中已经包含 `<resource>/status` 的 `get` 权限。
 - `config/samples/*.yaml`：资源样例。
-- `config/crd/kustomization.yaml`、`config/rbac/kustomization.yaml` 和 `config/samples/kustomization.yaml`：新增资源时，把它的 CRD、角色和样例加到对应的列表中。
+- `config/crd/kustomization.yaml`、`config/rbac/kustomization.yaml` 和 `config/samples/kustomization.yaml`：kubebuilder 会把新资源的 CRD、辅助角色和样例加到这些列表中。
 
 ## 使用生成的 client {#using-generated-clients}
 

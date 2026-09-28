@@ -58,14 +58,14 @@ The generators decide what to produce from markers in Go comments. The table lis
 | `+kubebuilder:validation:*`, `+required`, `+optional` | Fields or types | Adds OpenAPI validation to the CRD; `XValidation` adds [CEL validation rules](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) |
 | `+kubebuilder:rbac` | Controller code | Generates the controller's permissions in `config/rbac/role.yaml` |
 
-## Hand-Maintained Files {#hand-maintained-files}
+## Scaffolded Files {#scaffolded-files}
 
-These files come from kubebuilder's scaffolding templates, and neither `make generate` nor `make manifests` updates them. Keep them in sync by hand when you add or change a resource:
+When you add a resource, `kubebuilder create api` generates or updates the files below from its templates; without kubebuilder, add them by hand. Neither `make generate` nor `make manifests` changes them afterwards.
 
 - `PROJECT`: the kubebuilder project configuration, which records the resources in the project.
-- `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`: helper roles that cluster administrators can grant to users. The controller does not use them. When a resource has a status subresource, add `get` on `<resource>/status` to these roles.
+- `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`: helper roles that cluster administrators can grant to users. The controller does not use them. The templates already include `get` on `<resource>/status`.
 - `config/samples/*.yaml`: sample resources.
-- `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`, and `config/samples/kustomization.yaml`: when you add a resource, add its CRD, roles, and sample to these lists.
+- `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`, and `config/samples/kustomization.yaml`: kubebuilder adds the new resource's CRD, helper roles, and sample to these lists.
 
 ## Using the Generated Clients {#using-generated-clients}
 
