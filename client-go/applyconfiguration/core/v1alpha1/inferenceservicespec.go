@@ -19,8 +19,12 @@ package v1alpha1
 
 // InferenceServiceSpecApplyConfiguration represents a declarative configuration of the InferenceServiceSpec type for use
 // with apply.
+//
+// InferenceServiceSpec defines the desired state of InferenceService
 type InferenceServiceSpecApplyConfiguration struct {
-	Roles              []RoleApplyConfiguration              `json:"roles,omitempty"`
+	// Roles defines the components of the inference service
+	Roles []RoleApplyConfiguration `json:"roles,omitempty"`
+	// SchedulingStrategy applies cluster-wide scheduling policies (e.g., Volcano).
 	SchedulingStrategy *SchedulingStrategyApplyConfiguration `json:"schedulingStrategy,omitempty"`
 }
 

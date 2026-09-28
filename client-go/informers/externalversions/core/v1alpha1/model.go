@@ -56,7 +56,7 @@ func NewModelInformer(client versioned.Interface, namespace string, resyncPeriod
 // one. This reduces memory footprint and number of connections to the server.
 func NewFilteredModelInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
@@ -81,7 +81,7 @@ func NewFilteredModelInformer(client versioned.Interface, namespace string, resy
 				}
 				return client.FusioninferV1alpha1().Models(namespace).Watch(ctx, options)
 			},
-		},
+		}, client),
 		&apicorev1alpha1.Model{},
 		resyncPeriod,
 		indexers,

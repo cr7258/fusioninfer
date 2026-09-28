@@ -19,10 +19,16 @@ package v1alpha1
 
 // ModelSpecApplyConfiguration represents a declarative configuration of the ModelSpec type for use
 // with apply.
+//
+// ModelSpec declares a model artifact and the nodes to prefetch it to.
 type ModelSpecApplyConfiguration struct {
-	Source   *ModelSourceApplyConfiguration      `json:"source,omitempty"`
-	LoRA     *LoRAArtifactSpecApplyConfiguration `json:"lora,omitempty"`
-	Prefetch *PrefetchSpecApplyConfiguration     `json:"prefetch,omitempty"`
+	// Source identifies where the model artifact is stored.
+	Source *ModelSourceApplyConfiguration `json:"source,omitempty"`
+	// LoRA identifies this artifact as a LoRA adapter and names its Base Model.
+	LoRA *LoRAArtifactSpecApplyConfiguration `json:"lora,omitempty"`
+	// Prefetch declares the nodes to download the model to before it is needed.
+	// When omitted, the model is downloaded on demand.
+	Prefetch *PrefetchSpecApplyConfiguration `json:"prefetch,omitempty"`
 }
 
 // ModelSpecApplyConfiguration constructs a declarative configuration of the ModelSpec type for use with

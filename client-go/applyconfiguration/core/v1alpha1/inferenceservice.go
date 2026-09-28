@@ -25,11 +25,16 @@ import (
 
 // InferenceServiceApplyConfiguration represents a declarative configuration of the InferenceService type for use
 // with apply.
+//
+// InferenceService is the Schema for the inferenceservices API
 type InferenceServiceApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration `json:",inline"`
+	// metadata is a standard object metadata
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                             *InferenceServiceSpecApplyConfiguration   `json:"spec,omitempty"`
-	Status                           *InferenceServiceStatusApplyConfiguration `json:"status,omitempty"`
+	// spec defines the desired state of InferenceService
+	Spec *InferenceServiceSpecApplyConfiguration `json:"spec,omitempty"`
+	// status defines the observed state of InferenceService
+	Status *InferenceServiceStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // InferenceService constructs a declarative configuration of the InferenceService type for use with
@@ -42,6 +47,7 @@ func InferenceService(name, namespace string) *InferenceServiceApplyConfiguratio
 	b.WithAPIVersion("fusioninfer.io/v1alpha1")
 	return b
 }
+
 func (b InferenceServiceApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

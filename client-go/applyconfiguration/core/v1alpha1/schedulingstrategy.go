@@ -19,7 +19,10 @@ package v1alpha1
 
 // SchedulingStrategyApplyConfiguration represents a declarative configuration of the SchedulingStrategy type for use
 // with apply.
+//
+// SchedulingStrategy defines pod-level scheduling behavior.
 type SchedulingStrategyApplyConfiguration struct {
+	// SchedulerName specifies the Kubernetes scheduler to use (e.g., "volcano").
 	SchedulerName *string `json:"schedulerName,omitempty"`
 }
 

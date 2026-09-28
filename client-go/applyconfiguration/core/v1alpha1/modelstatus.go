@@ -23,10 +23,15 @@ import (
 
 // ModelStatusApplyConfiguration represents a declarative configuration of the ModelStatus type for use
 // with apply.
+//
+// ModelStatus reports source accessibility and prefetch progress.
 type ModelStatusApplyConfiguration struct {
-	ObservedGeneration *int64                            `json:"observedGeneration,omitempty"`
-	Prefetch           *PrefetchStatusApplyConfiguration `json:"prefetch,omitempty"`
-	Conditions         []v1.ConditionApplyConfiguration  `json:"conditions,omitempty"`
+	// ObservedGeneration is the most recent generation observed by the controller.
+	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+	// Prefetch reports download progress on the nodes selected by spec.prefetch.
+	Prefetch *PrefetchStatusApplyConfiguration `json:"prefetch,omitempty"`
+	// Conditions represent the latest available observations of the model's state.
+	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
 // ModelStatusApplyConfiguration constructs a declarative configuration of the ModelStatus type for use with

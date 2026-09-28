@@ -204,7 +204,7 @@ CODEGEN_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.3.0
+GOLANGCI_LINT_VERSION ?= v2.11.4
 
 .PHONY: code-generator
 code-generator: ## Download the Kubernetes code-generator scripts.

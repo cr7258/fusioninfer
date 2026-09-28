@@ -19,7 +19,10 @@ package v1alpha1
 
 // LoRAArtifactSpecApplyConfiguration represents a declarative configuration of the LoRAArtifactSpec type for use
 // with apply.
+//
+// LoRAArtifactSpec declares the base model required by a LoRA artifact.
 type LoRAArtifactSpecApplyConfiguration struct {
+	// BaseModelRef identifies the compatible base model.
 	BaseModelRef *ModelReferenceApplyConfiguration `json:"baseModelRef,omitempty"`
 }
 

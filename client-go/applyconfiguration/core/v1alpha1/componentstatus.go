@@ -24,14 +24,32 @@ import (
 
 // ComponentStatusApplyConfiguration represents a declarative configuration of the ComponentStatus type for use
 // with apply.
+//
+// ComponentStatus captures the aggregated runtime state of a single inference component (role).
+// For example, with replicas=2 and multinode.nodeCount=4:
+// - DesiredReplicas: 2
+// - NodesPerReplica: 4
+// - TotalPods: 8 (2 * 4)
+// - ReadyReplicas: 0/1/2 (a replica is ready only when all its nodes are ready)
+// - ReadyPods: 0-8
 type ComponentStatusApplyConfiguration struct {
-	DesiredReplicas *int32                       `json:"desiredReplicas,omitempty"`
-	ReadyReplicas   *int32                       `json:"readyReplicas,omitempty"`
-	NodesPerReplica *int32                       `json:"nodesPerReplica,omitempty"`
-	TotalPods       *int32                       `json:"totalPods,omitempty"`
-	ReadyPods       *int32                       `json:"readyPods,omitempty"`
-	Phase           *corev1alpha1.ComponentPhase `json:"phase,omitempty"`
-	LastUpdateTime  *v1.Time                     `json:"lastUpdateTime,omitempty"`
+	// DesiredReplicas is the number of replicas requested (from spec.roles[].replicas).
+	DesiredReplicas *int32 `json:"desiredReplicas,omitempty"`
+	// ReadyReplicas is the number of replicas that are fully ready.
+	// For multi-node replicas, a replica is ready only when all its nodes are ready.
+	ReadyReplicas *int32 `json:"readyReplicas,omitempty"`
+	// NodesPerReplica is the number of nodes per replica (from spec.roles[].multinode.nodeCount).
+	// Defaults to 1 when multinode is not configured.
+	NodesPerReplica *int32 `json:"nodesPerReplica,omitempty"`
+	// TotalPods is the total number of pods desired (= DesiredReplicas * NodesPerReplica).
+	TotalPods *int32 `json:"totalPods,omitempty"`
+	// ReadyPods is the total number of ready pods across all replicas.
+	ReadyPods *int32 `json:"readyPods,omitempty"`
+	// Phase indicates the high-level lifecycle stage of this component.
+	// Possible values: Pending, Deploying, Running, Failed, Unknown.
+	Phase *corev1alpha1.ComponentPhase `json:"phase,omitempty"`
+	// LastUpdateTime is the timestamp when this component's status was last updated.
+	LastUpdateTime *v1.Time `json:"lastUpdateTime,omitempty"`
 }
 
 // ComponentStatusApplyConfiguration constructs a declarative configuration of the ComponentStatus type for use with

@@ -25,11 +25,16 @@ import (
 
 // ClusterModelApplyConfiguration represents a declarative configuration of the ClusterModel type for use
 // with apply.
+//
+// ClusterModel declares a cluster-scoped model artifact.
 type ClusterModelApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration `json:",inline"`
+	// Metadata is the standard object metadata.
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                             *ModelSpecApplyConfiguration   `json:"spec,omitempty"`
-	Status                           *ModelStatusApplyConfiguration `json:"status,omitempty"`
+	// Spec declares the model artifact.
+	Spec *ModelSpecApplyConfiguration `json:"spec,omitempty"`
+	// Status reports source accessibility and prefetch progress.
+	Status *ModelStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // ClusterModel constructs a declarative configuration of the ClusterModel type for use with
@@ -41,6 +46,7 @@ func ClusterModel(name string) *ClusterModelApplyConfiguration {
 	b.WithAPIVersion("fusioninfer.io/v1alpha1")
 	return b
 }
+
 func (b ClusterModelApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

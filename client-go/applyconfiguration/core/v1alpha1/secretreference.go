@@ -19,7 +19,12 @@ package v1alpha1
 
 // SecretReferenceApplyConfiguration represents a declarative configuration of the SecretReference type for use
 // with apply.
+//
+// SecretReference names a Secret that holds credentials for a model source.
+// A Model reads the Secret from its own namespace, and a ClusterModel reads it
+// from the FusionInfer system namespace.
 type SecretReferenceApplyConfiguration struct {
+	// Name is the name of the Secret.
 	Name *string `json:"name,omitempty"`
 }
 

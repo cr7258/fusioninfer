@@ -23,10 +23,16 @@ import (
 
 // InferenceServiceStatusApplyConfiguration represents a declarative configuration of the InferenceServiceStatus type for use
 // with apply.
+//
+// InferenceServiceStatus defines the observed state of InferenceService.
 type InferenceServiceStatusApplyConfiguration struct {
-	ObservedGeneration *int64                                       `json:"observedGeneration,omitempty"`
-	Conditions         []v1.ConditionApplyConfiguration             `json:"conditions,omitempty"`
-	Components         map[string]ComponentStatusApplyConfiguration `json:"components,omitempty"`
+	// ObservedGeneration is the most recent generation observed by the controller.
+	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+	// Conditions represent the latest available observations of the service's state.
+	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
+	// Components summarizes the current state of each declared role/component.
+	// Key is the component's .spec.roles[].name.
+	Components map[string]ComponentStatusApplyConfiguration `json:"components,omitempty"`
 }
 
 // InferenceServiceStatusApplyConfiguration constructs a declarative configuration of the InferenceServiceStatus type for use with

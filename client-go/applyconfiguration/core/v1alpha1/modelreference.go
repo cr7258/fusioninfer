@@ -19,8 +19,12 @@ package v1alpha1
 
 // ModelReferenceApplyConfiguration represents a declarative configuration of the ModelReference type for use
 // with apply.
+//
+// ModelReference identifies a Model or ClusterModel in the fusioninfer.io API group.
 type ModelReferenceApplyConfiguration struct {
+	// Kind is the referenced resource kind.
 	Kind *string `json:"kind,omitempty"`
+	// Name is the referenced resource name.
 	Name *string `json:"name,omitempty"`
 }
 
