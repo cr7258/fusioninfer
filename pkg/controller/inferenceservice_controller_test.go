@@ -169,7 +169,7 @@ func TestInferenceServiceSpecHashUpdates(t *testing.T) {
 
 		t.Log("Verifying LWS has spec-hash label")
 		if createdLWS.Labels[workload.LabelSpecHash] == "" {
-			t.Fatalf("LWS %q has no %s label", lwsKey.Name, workload.LabelSpecHash)
+			t.Errorf("LWS %q has no %s label", lwsKey.Name, workload.LabelSpecHash)
 		}
 
 		t.Log("Increasing replicas to 2")

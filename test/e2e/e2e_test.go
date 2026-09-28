@@ -72,6 +72,9 @@ func waitFor(ctx context.Context, timeout time.Duration, condition func() error)
 func TestManager(t *testing.T) {
 	var controllerPodName string
 
+	// Steps that create resources stop the feature with t.Fatal when they fail, because the
+	// checks after them depend on those resources. Checks report failures with t.Error so
+	// that one failed check does not hide the others.
 	manager := features.New("Manager").
 		// Before running the tests, set up the environment by creating the namespace,
 		// enforce the restricted security policy to the namespace, installing CRDs,
@@ -144,7 +147,7 @@ func TestManager(t *testing.T) {
 				return nil
 			}
 			if err := waitFor(ctx, defaultWaitTimeout, verifyControllerUp); err != nil {
-				t.Fatal(err)
+				t.Errorf("controller-manager pod is not running: %v", err)
 			}
 			return ctx
 		}).
@@ -162,7 +165,7 @@ func TestManager(t *testing.T) {
 				t.Log("validating that the metrics service is available")
 				cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
 				if _, err := utils.Run(cmd); err != nil {
-					t.Fatalf("Metrics service should exist: %v", err)
+					t.Errorf("Metrics service should exist: %v", err)
 				}
 
 				t.Log("getting the service account token")
@@ -187,7 +190,7 @@ func TestManager(t *testing.T) {
 					return nil
 				}
 				if err := waitFor(ctx, defaultWaitTimeout, verifyMetricsEndpointReady); err != nil {
-					t.Fatal(err)
+					t.Error(err)
 				}
 
 				t.Log("verifying that the controller manager is serving the metrics server")
@@ -202,8 +205,10 @@ func TestManager(t *testing.T) {
 					}
 					return nil
 				}
-				if err := waitFor(ctx, defaultWaitTimeout, verifyMetricsServerStarted); err != nil {
-					t.Fatal(err)
+				if controllerPodName == "" {
+					t.Error("Skipping the metrics server check because the controller-manager pod name is unknown")
+				} else if err := waitFor(ctx, defaultWaitTimeout, verifyMetricsServerStarted); err != nil {
+					t.Error(err)
 				}
 
 				t.Log("creating the curl-metrics pod to access the metrics endpoint")
@@ -253,13 +258,20 @@ func TestManager(t *testing.T) {
 					return nil
 				}
 				if err := waitFor(ctx, 5*time.Minute, verifyCurlUp); err != nil {
-					t.Fatal(err)
+					t.Error(err)
 				}
 
 				t.Log("getting the metrics by checking curl-metrics logs")
-				metricsOutput := getMetricsOutput(t)
+				metricsOutput, err := getMetricsOutput()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				if !strings.Contains(metricsOutput, "< HTTP/1.1 200 OK") {
+					t.Errorf("Metrics endpoint did not return 200 OK:\n%s", metricsOutput)
+				}
 				if !strings.Contains(metricsOutput, "controller_runtime_reconcile_total") {
-					t.Fatalf("Metrics output does not contain controller_runtime_reconcile_total:\n%s", metricsOutput)
+					t.Errorf("Metrics output does not contain controller_runtime_reconcile_total:\n%s", metricsOutput)
 				}
 				return ctx
 			}).
@@ -382,18 +394,13 @@ func serviceAccountToken(ctx context.Context) (string, error) {
 }
 
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
-func getMetricsOutput(t *testing.T) string {
-	t.Helper()
-	t.Log("getting the curl-metrics logs")
+func getMetricsOutput() (string, error) {
 	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 	metricsOutput, err := utils.Run(cmd)
 	if err != nil {
-		t.Fatalf("Failed to retrieve logs from curl pod: %v", err)
+		return "", fmt.Errorf("failed to retrieve logs from curl pod: %w", err)
 	}
-	if !strings.Contains(metricsOutput, "< HTTP/1.1 200 OK") {
-		t.Fatalf("Metrics endpoint did not return 200 OK:\n%s", metricsOutput)
-	}
-	return metricsOutput
+	return metricsOutput, nil
 }
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,

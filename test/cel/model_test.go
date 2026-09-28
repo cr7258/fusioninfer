@@ -127,10 +127,11 @@ func removeField(fields ...string) func(*unstructured.Unstructured) error {
 func expectInvalid(t *testing.T, err error, message string) {
 	t.Helper()
 	if !apierrors.IsInvalid(err) {
-		t.Fatalf("expected an Invalid error, got %v", err)
+		t.Errorf("expected an Invalid error, got %v", err)
+		return
 	}
 	if !strings.Contains(err.Error(), message) {
-		t.Fatalf("expected the error to contain %q, got %v", message, err)
+		t.Errorf("expected the error to contain %q, got %v", message, err)
 	}
 }
 
@@ -341,7 +342,7 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 			}
 			for _, update := range allowed {
 				if err := updateModel(ctx, base, update.mutate); err != nil {
-					t.Fatalf("update %s: %v", update.desc, err)
+					t.Errorf("update %s: %v", update.desc, err)
 				}
 			}
 
@@ -396,10 +397,10 @@ func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
 		t.Fatalf("get model: %v", err)
 	}
 	if diff := cmp.Diff(model.Status.Prefetch, stored.Status.Prefetch); diff != "" {
-		t.Fatalf("status.prefetch mismatch (-want +got):\n%s", diff)
+		t.Errorf("status.prefetch mismatch (-want +got):\n%s", diff)
 	}
 	if !meta.IsStatusConditionTrue(stored.Status.Conditions, fusioninferiov1alpha1.ModelConditionAccessible) {
-		t.Fatalf("condition %s is not True", fusioninferiov1alpha1.ModelConditionAccessible)
+		t.Errorf("condition %s is not True", fusioninferiov1alpha1.ModelConditionAccessible)
 	}
 
 	stored.Status = fusioninferiov1alpha1.ModelStatus{}
