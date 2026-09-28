@@ -101,6 +101,44 @@ jobs:
       - name: Build Docker image
         run: make docker-build
 
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KIND_VERSION: v0.33.0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kind
+        run: |
+          curl -sSLo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Run e2e tests
+        run: make test-e2e
+
+      - name: Export Kind logs
+        if: failure()
+        run: kind export logs /tmp/kind-logs --name fusioninfer-test-e2e || true
+
+      - name: Upload Kind logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-logs
+          path: /tmp/kind-logs
+          if-no-files-found: ignore
+
   docs:
     name: Docs Site
     runs-on: ubuntu-latest
