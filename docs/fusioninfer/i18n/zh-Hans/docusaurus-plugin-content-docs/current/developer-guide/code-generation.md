@@ -30,7 +30,7 @@ FusionInfer 的 API 类型定义在 `api/core/v1alpha1/*_types.go` 中。DeepCop
 
 1. 修改 `api/core/v1alpha1/*_types.go` 中的字段或标记。
 2. 运行 `make generate manifests`，重新生成代码和清单。
-3. 运行 `make test`。它也会先执行生成，再运行测试。
+3. 运行 `make test`。它会先运行 `make manifests` 和 `make generate`，让测试用上最新的 CRD 和生成代码。
 4. 把源码和生成的文件放在同一个 commit 中提交。
 
 CI 的 Unit Tests job 会重新执行 `make generate` 和 `make manifests`，再检查工作区有没有变化。只要生成的文件和源码对不上，CI 就会失败，并提示：
