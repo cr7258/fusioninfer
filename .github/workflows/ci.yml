@@ -67,12 +67,8 @@ jobs:
             exit 1
           fi
 
-      - name: Setup envtest
-        run: make setup-envtest
-
       - name: Run unit tests
-        run: |
-          KUBEBUILDER_ASSETS="$(./bin/setup-envtest use -p path)" go test ./... -coverprofile cover.out -covermode=atomic
+        run: make test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
