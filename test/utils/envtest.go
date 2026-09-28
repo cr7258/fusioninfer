@@ -19,21 +19,36 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/util/version"
 )
 
-// FirstEnvTestBinaryDir returns the first directory under basePath, or "" if there is none.
-// ENVTEST-based tests depend on binaries that the Makefile targets locate through
-// KUBEBUILDER_ASSETS. When tests run directly (e.g., from an IDE), envtest needs the
-// directory explicitly; run 'make setup-envtest' first to install the binaries under bin/k8s.
-func FirstEnvTestBinaryDir(basePath string) string {
+// LatestEnvTestBinaryDir returns the directory under basePath with the newest envtest binaries
+// for this platform, or "" if there is none. Tests that run without make, for example from an
+// IDE, use it to find the binaries that 'make setup-envtest' installs under bin/k8s. Older
+// versions stay there after a Kubernetes upgrade, so the newest one is the current version.
+func LatestEnvTestBinaryDir(basePath string) string {
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
 		return ""
 	}
+	platform := "-" + runtime.GOOS + "-" + runtime.GOARCH
+	var latest *version.Version
+	var latestDir string
 	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(basePath, entry.Name())
+		name, ok := strings.CutSuffix(entry.Name(), platform)
+		if !entry.IsDir() || !ok {
+			continue
+		}
+		v, err := version.ParseSemantic(name)
+		if err != nil {
+			continue
+		}
+		if latest == nil || v.GreaterThan(latest) {
+			latest, latestDir = v, filepath.Join(basePath, entry.Name())
 		}
 	}
-	return ""
+	return latestDir
 }

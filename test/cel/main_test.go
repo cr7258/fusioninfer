@@ -55,7 +55,7 @@ func run(m *testing.M) int {
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 		// Lets the tests run from an IDE; KUBEBUILDER_ASSETS, set by make test, takes precedence.
-		BinaryAssetsDirectory: utils.FirstEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
+		BinaryAssetsDirectory: utils.LatestEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
 	cfg, err := testEnv.Start()
 	if err != nil {

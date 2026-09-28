@@ -68,7 +68,7 @@ func run(m *testing.M) int {
 			filepath.Join("..", "..", "config", "crd", "external"), // External CRDs (LWS, InferencePool, etc.)
 		},
 		ErrorIfCRDPathMissing: false, // Allow missing external CRDs for now
-		BinaryAssetsDirectory: utils.FirstEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
+		BinaryAssetsDirectory: utils.LatestEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
 	cfg, err := testEnv.Start()
 	if err != nil {
