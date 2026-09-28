@@ -60,12 +60,18 @@ The generators decide what to produce from markers in Go comments. The table lis
 
 ## Scaffolded Files {#scaffolded-files}
 
-When you add a resource, `kubebuilder create api` generates or updates the files below from its templates; without kubebuilder, add them by hand. Neither `make generate` nor `make manifests` changes them afterwards.
+When you add a resource, `kubebuilder create api` generates or updates these files from its templates. Neither `make generate` nor `make manifests` changes them:
 
 - `PROJECT`: the kubebuilder project configuration, which records the resources in the project.
 - `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`: helper roles that cluster administrators can grant to users. The controller does not use them. The templates already include `get` on `<resource>/status`.
 - `config/samples/*.yaml`: sample resources.
-- `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`, and `config/samples/kustomization.yaml`: kubebuilder adds the new resource's CRD, helper roles, and sample to these lists.
+- `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`, and `config/samples/kustomization.yaml`: the lists of CRDs, helper roles, and samples to deploy.
+
+Edit them by hand in these cases:
+
+- After changing API fields, update the affected samples so they match the new schema, for example by removing fields that no longer exist or adding new required fields.
+- When you remove a resource, kubebuilder does not clean up after it. Delete its entry in `PROJECT`, its three helper roles, and its sample, and remove its entries from the three `kustomization.yaml` files.
+- When you add a resource without kubebuilder, create all of the files above by hand.
 
 ## Using the Generated Clients {#using-generated-clients}
 
