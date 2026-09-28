@@ -18,67 +18,62 @@ package controller
 
 import (
 	"context"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 )
 
-var _ = Describe("ModelLoader Controller", func() {
-	Context("When reconciling a resource", func() {
+func TestModelLoaderReconcile(t *testing.T) {
+	t.Run("should successfully reconcile the resource", func(t *testing.T) {
+		ctx := t.Context()
 		const resourceName = "test-resource"
-
-		ctx := context.Background()
-
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
+
+		t.Log("creating the custom resource for the Kind ModelLoader")
 		modelloader := &fusioninferiov1alpha1.ModelLoader{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind ModelLoader")
-			err := k8sClient.Get(ctx, typeNamespacedName, modelloader)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &fusioninferiov1alpha1.ModelLoader{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		err := k8sClient.Get(ctx, typeNamespacedName, modelloader)
+		if err != nil && apierrors.IsNotFound(err) {
+			resource := &fusioninferiov1alpha1.ModelLoader{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
 			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			if err := k8sClient.Create(ctx, resource); err != nil {
+				t.Fatalf("create ModelLoader: %v", err)
+			}
+		}
+		t.Cleanup(func() {
 			resource := &fusioninferiov1alpha1.ModelLoader{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance ModelLoader")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &ModelLoaderReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+			if err := k8sClient.Get(context.Background(), typeNamespacedName, resource); err != nil {
+				t.Errorf("get ModelLoader: %v", err)
+				return
 			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			t.Log("Cleanup the specific resource instance ModelLoader")
+			if err := k8sClient.Delete(context.Background(), resource); err != nil {
+				t.Errorf("delete ModelLoader: %v", err)
+			}
 		})
+
+		t.Log("Reconciling the created resource")
+		controllerReconciler := &ModelLoaderReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+		}
+
+		_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		if err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
 	})
-})
+}

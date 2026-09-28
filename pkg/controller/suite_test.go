@@ -18,15 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -38,122 +36,83 @@ import (
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
-	// +kubebuilder:scaffold:imports
+	"github.com/fusioninfer/fusioninfer/test/utils"
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+var k8sClient client.Client
 
-var (
-	ctx       context.Context
-	cancel    context.CancelFunc
-	testEnv   *envtest.Environment
-	cfg       *rest.Config
-	k8sClient client.Client
-	mgr       ctrl.Manager
-)
-
-func TestControllers(t *testing.T) {
-	RegisterFailHandler(Fail)
-
-	RunSpecs(t, "Controller Suite")
+func TestMain(m *testing.M) {
+	os.Exit(run(m))
 }
 
-var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	ctx, cancel = context.WithCancel(context.TODO())
-
-	var err error
+func run(m *testing.M) int {
+	logf.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
 	// Register all schemes
-	err = fusioninferiov1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	for _, addToScheme := range []func(*runtime.Scheme) error{
+		fusioninferiov1alpha1.AddToScheme,
+		lwsv1.AddToScheme,
+		schedulingv1beta1.AddToScheme,
+		inferenceapi.Install,
+		gatewayv1.Install,
+	} {
+		if err := addToScheme(scheme.Scheme); err != nil {
+			fmt.Fprintf(os.Stderr, "register scheme: %v\n", err)
+			return 1
+		}
+	}
 
-	err = lwsv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = schedulingv1beta1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = inferenceapi.Install(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = gatewayv1.Install(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
-
-	By("bootstrapping test environment")
-	testEnv = &envtest.Environment{
+	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join("..", "..", "config", "crd", "external"), // External CRDs (LWS, InferencePool, etc.)
 		},
 		ErrorIfCRDPathMissing: false, // Allow missing external CRDs for now
+		BinaryAssetsDirectory: utils.FirstEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
-
-	// Retrieve the first found binary directory to allow running tests from IDEs
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
+	cfg, err := testEnv.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start envtest: %v\n", err)
+		return 1
 	}
-
-	// cfg is defined in this file globally.
-	cfg, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
+	defer func() {
+		if err := testEnv.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "stop envtest: %v\n", err)
+		}
+	}()
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create client: %v\n", err)
+		return 1
+	}
 
-	// Create manager with controller
-	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
-	Expect(err).NotTo(HaveOccurred())
-
-	// Setup controller with manager
-	err = (&InferenceServiceReconciler{
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create manager: %v\n", err)
+		return 1
+	}
+	if err := (&InferenceServiceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
+	}).SetupWithManager(mgr); err != nil {
+		fmt.Fprintf(os.Stderr, "set up InferenceService controller: %v\n", err)
+		return 1
+	}
 
-	// Start manager in background
+	ctx, cancel := context.WithCancel(context.Background())
+	mgrErr := make(chan error, 1)
 	go func() {
-		defer GinkgoRecover()
-		err := mgr.Start(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		mgrErr <- mgr.Start(ctx)
 	}()
-})
 
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
+	code := m.Run()
 	cancel()
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
-})
-
-// getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
-// ENVTEST-based tests depend on specific binaries, usually located in paths set by
-// controller-runtime. When running tests directly (e.g., via an IDE) without using
-// Makefile targets, the 'BinaryAssetsDirectory' must be explicitly configured.
-//
-// This function streamlines the process by finding the required binaries, similar to
-// setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
-// properly set up, run 'make setup-envtest' beforehand.
-func getFirstFoundEnvTestBinaryDir() string {
-	basePath := filepath.Join("..", "..", "bin", "k8s")
-	entries, err := os.ReadDir(basePath)
-	if err != nil {
-		logf.Log.Error(err, "Failed to read directory", "path", basePath)
-		return ""
+	if err := <-mgrErr; err != nil {
+		fmt.Fprintf(os.Stderr, "manager: %v\n", err)
+		return 1
 	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(basePath, entry.Name())
-		}
-	}
-	return ""
+	return code
 }
