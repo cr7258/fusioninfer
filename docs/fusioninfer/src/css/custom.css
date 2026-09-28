@@ -394,6 +394,7 @@ summary,
   border: 1px solid rgba(92, 179, 255, 0.16);
   border-radius: 10px;
   box-shadow: 0 12px 28px rgba(2, 18, 34, 0.1);
+  tab-size: 4;
 }
 
 /* Preserve GitHub's light palette while keeping small code text readable. */
