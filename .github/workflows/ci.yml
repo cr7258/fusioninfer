@@ -107,6 +107,7 @@ jobs:
     timeout-minutes: 30
     env:
       KIND_VERSION: v0.33.0
+      E2E_ARTIFACTS_DIR: /tmp/e2e-artifacts
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -125,19 +126,19 @@ jobs:
           kind version
 
       - name: Run e2e tests
-        run: make test-e2e
+        run: make test-e2e KEEP_KIND_CLUSTER=true
 
       - name: Export Kind logs
-        if: failure()
-        run: kind export logs /tmp/kind-logs --name fusioninfer-test-e2e || true
+        if: always()
+        run: kind export logs "${E2E_ARTIFACTS_DIR}/kind" --name fusioninfer-test-e2e || true
 
-      - name: Upload Kind logs
-        if: failure()
+      - name: Upload e2e logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kind-logs
-          path: /tmp/kind-logs
-          if-no-files-found: ignore
+          name: e2e-logs
+          path: ${{ env.E2E_ARTIFACTS_DIR }}
+          if-no-files-found: warn
 
   docs:
     name: Docs Site

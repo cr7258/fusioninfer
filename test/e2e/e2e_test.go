@@ -275,14 +275,12 @@ func TestManager(t *testing.T) {
 				}
 				return ctx
 			}).
-		// After all assessments have been executed, collect debugging information if any of
-		// them failed, then clean up by undeploying the controller, uninstalling CRDs, and
-		// deleting the namespace. The collection runs here rather than in AfterEachFeature,
-		// which e2e-framework runs after the teardown has removed the controller.
+		// After all assessments have been executed, collect debugging information, then clean
+		// up by undeploying the controller, uninstalling CRDs, and deleting the namespace. The
+		// collection runs here rather than in AfterEachFeature, which e2e-framework runs after
+		// the teardown has removed the controller.
 		WithTeardown("clean up", func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
-			if t.Failed() {
-				collectDebugInfo(t, controllerPodName)
-			}
+			collectDebugInfo(t, controllerPodName)
 
 			t.Log("cleaning up the curl pod for metrics")
 			cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
@@ -306,45 +304,38 @@ func TestManager(t *testing.T) {
 	testenv.Test(t, manager)
 }
 
-// collectDebugInfo logs the controller-manager pod logs and description, the Kubernetes events,
-// and the curl-metrics pod logs.
+// collectDebugInfo gathers the controller-manager pod logs and description, the Kubernetes events,
+// and the curl-metrics pod logs. It saves them to artifactsDir when that is set, and logs them when
+// the test failed.
 func collectDebugInfo(t *testing.T, controllerPodName string) {
 	t.Helper()
 
-	t.Log("Fetching controller manager pod logs")
-	cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
-	controllerLogs, err := utils.Run(cmd)
-	if err == nil {
-		t.Logf("Controller logs:\n %s", controllerLogs)
-	} else {
-		t.Logf("Failed to get Controller logs: %s", err)
+	if artifactsDir != "" {
+		if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
+			t.Logf("Failed to create %s: %v", artifactsDir, err)
+		}
 	}
-
-	t.Log("Fetching Kubernetes events")
-	cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
-	eventsOutput, err := utils.Run(cmd)
-	if err == nil {
-		t.Logf("Kubernetes events:\n%s", eventsOutput)
-	} else {
-		t.Logf("Failed to get Kubernetes events: %s", err)
-	}
-
-	t.Log("Fetching curl-metrics logs")
-	cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
-	metricsOutput, err := utils.Run(cmd)
-	if err == nil {
-		t.Logf("Metrics logs:\n %s", metricsOutput)
-	} else {
-		t.Logf("Failed to get curl-metrics logs: %s", err)
-	}
-
-	t.Log("Fetching controller manager pod description")
-	cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
-	podDescription, err := utils.Run(cmd)
-	if err == nil {
-		t.Logf("Pod description:\n %s", podDescription)
-	} else {
-		t.Log("Failed to describe controller pod")
+	for _, item := range []struct {
+		file string
+		args []string
+	}{
+		{"controller-manager.log", []string{"logs", controllerPodName, "-n", namespace}},
+		{"events.txt", []string{"get", "events", "-n", namespace, "--sort-by=.lastTimestamp"}},
+		{"curl-metrics.log", []string{"logs", "curl-metrics", "-n", namespace}},
+		{"controller-manager-pod.txt", []string{"describe", "pod", controllerPodName, "-n", namespace}},
+	} {
+		output, err := utils.Run(exec.Command("kubectl", item.args...))
+		if err != nil {
+			output = err.Error()
+		}
+		if t.Failed() {
+			t.Logf("%s:\n%s", item.file, output)
+		}
+		if artifactsDir != "" {
+			if err := os.WriteFile(filepath.Join(artifactsDir, item.file), []byte(output), 0o644); err != nil {
+				t.Logf("Failed to save %s: %v", item.file, err)
+			}
+		}
 	}
 }
 

@@ -38,6 +38,9 @@ var (
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	// - E2E_ARTIFACTS_DIR=<dir>: Saves the controller-manager logs and description, the
+	//   Kubernetes events, and the curl-metrics pod logs to <dir> before the teardown.
+	artifactsDir = os.Getenv("E2E_ARTIFACTS_DIR")
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
