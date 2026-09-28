@@ -57,18 +57,3 @@ The generators decide what to produce from markers in Go comments. The table lis
 | `+genclient:noStatus` | Resource types without status | Skips `UpdateStatus` and `ApplyStatus` |
 | `+kubebuilder:validation:*`, `+required`, `+optional` | Fields or types | Adds OpenAPI validation to the CRD; `XValidation` adds [CEL validation rules](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) |
 | `+kubebuilder:rbac` | Controller code | Generates the controller's permissions in `config/rbac/role.yaml` |
-
-## Scaffolded Files {#scaffolded-files}
-
-When you add a resource, `kubebuilder create api` generates or updates these files from its templates. Neither `make generate` nor `make manifests` changes them:
-
-- `PROJECT`: the kubebuilder project configuration, which records the resources in the project.
-- `config/rbac/<resource>_{admin,editor,viewer}_role.yaml`: helper roles that cluster administrators can grant to users. The controller does not use them. The templates already include `get` on `<resource>/status`.
-- `config/samples/*.yaml`: sample resources.
-- `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`, and `config/samples/kustomization.yaml`: the lists of CRDs, helper roles, and samples to deploy.
-
-Edit them by hand in these cases:
-
-- After changing API fields, update the affected samples so they match the new schema, for example by removing fields that no longer exist or adding new required fields.
-- When you remove a resource, kubebuilder does not clean up after it. Delete its entry in `PROJECT`, its three helper roles, and its sample, and remove its entries from the three `kustomization.yaml` files.
-- When you add a resource without kubebuilder, create all of the files above by hand.
