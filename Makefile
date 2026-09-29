@@ -64,8 +64,6 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
-# CertManager is installed by default; skip with:
-# - CERT_MANAGER_INSTALL_SKIP=true
 # Set KEEP_KIND_CLUSTER=true to keep the Kind cluster after the tests, for example to export its logs.
 KIND_CLUSTER ?= fusioninfer-test-e2e
 KEEP_KIND_CLUSTER ?= false
