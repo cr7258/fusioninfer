@@ -18,17 +18,18 @@ package cel
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 )
 
 const (
-	modelAPIVersion = "fusioninfer.io/v1alpha1"
-
 	// Valid sources that the test objects start from.
 	hfModelURI   = "hf://Qwen/Qwen3-8B"
 	s3AdapterURI = "s3://team-a-models/adapters/qwen3-8b-finance"
@@ -47,55 +48,70 @@ const (
 	msgOCI         = "oci uri must be oci://<registry>/<repository>"
 )
 
-// modelObject builds an unstructured Model or ClusterModel, so the tests can send missing or
-// malformed fields that the typed structs cannot express.
-func modelObject(kind, name, namespace string, spec map[string]any) *unstructured.Unstructured {
-	object := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": modelAPIVersion,
-			"kind":       kind,
-			"metadata": map[string]any{
-				"name": name,
-			},
-			"spec": spec,
-		},
+// modelObject returns a Model in the default namespace or a cluster-scoped ClusterModel.
+func modelObject(kind, name string, spec fusioninferiov1alpha1.ModelSpec) client.Object {
+	switch kind {
+	case "Model":
+		return &fusioninferiov1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec:       spec,
+		}
+	case "ClusterModel":
+		return &fusioninferiov1alpha1.ClusterModel{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec:       spec,
+		}
+	default:
+		panic(fmt.Sprintf("unknown kind %q", kind))
 	}
-	object.SetNamespace(namespace)
-	return object
+}
+
+// specOf returns the spec of a Model or ClusterModel, which share ModelSpec.
+func specOf(object client.Object) *fusioninferiov1alpha1.ModelSpec {
+	switch object := object.(type) {
+	case *fusioninferiov1alpha1.Model:
+		return &object.Spec
+	case *fusioninferiov1alpha1.ClusterModel:
+		return &object.Spec
+	default:
+		panic(fmt.Sprintf("%T is not a Model or ClusterModel", object))
+	}
 }
 
 // sourceSpec returns a spec that only sets source.uri.
-func sourceSpec(uri string) map[string]any {
-	return map[string]any{"source": map[string]any{"uri": uri}}
+func sourceSpec(uri string) fusioninferiov1alpha1.ModelSpec {
+	return fusioninferiov1alpha1.ModelSpec{Source: fusioninferiov1alpha1.ModelSource{URI: uri}}
 }
 
-// credentialsSpec returns a spec with a valid URI and the given credentialsRef.
-func credentialsSpec(credentialsRef map[string]any) map[string]any {
-	return map[string]any{
-		"source": map[string]any{"uri": hfModelURI, "credentialsRef": credentialsRef},
-	}
-}
-
-// prefetchSpec returns a spec with a valid URI and the given prefetch.
-func prefetchSpec(prefetch map[string]any) map[string]any {
+// credentialsSpec returns a spec with a valid URI that reads its credentials from the named Secret.
+func credentialsSpec(secretName string) fusioninferiov1alpha1.ModelSpec {
 	spec := sourceSpec(hfModelURI)
-	spec["prefetch"] = prefetch
+	spec.Source.CredentialsRef = &fusioninferiov1alpha1.SecretReference{Name: secretName}
 	return spec
 }
 
-// loraSpec returns a LoRA adapter spec that references baseModelRef.
-func loraSpec(baseModelRef map[string]any) map[string]any {
+// prefetchSpec returns a spec with a valid URI and the given prefetch.
+func prefetchSpec(prefetch fusioninferiov1alpha1.PrefetchSpec) fusioninferiov1alpha1.ModelSpec {
+	spec := sourceSpec(hfModelURI)
+	spec.Prefetch = &prefetch
+	return spec
+}
+
+// loraSpec returns a LoRA adapter spec whose base model is the given kind and name.
+func loraSpec(kind, name string) fusioninferiov1alpha1.ModelSpec {
 	spec := sourceSpec(s3AdapterURI)
-	spec["lora"] = map[string]any{"baseModelRef": baseModelRef}
+	spec.LoRA = &fusioninferiov1alpha1.LoRAArtifactSpec{
+		BaseModelRef: fusioninferiov1alpha1.ModelReference{Kind: kind, Name: name},
+	}
 	return spec
 }
 
 // createModel creates object, fails the test if the API server rejects it, and deletes it when
 // the test ends.
-func createModel(t *testing.T, object *unstructured.Unstructured) {
+func createModel(t *testing.T, object client.Object) {
 	t.Helper()
 	if err := k8sClient.Create(t.Context(), object); err != nil {
-		t.Fatalf("create %s %q: %v", object.GetKind(), object.GetName(), err)
+		t.Fatalf("create %T %q: %v", object, object.GetName(), err)
 	}
 	// t.Context is canceled before cleanups run, so delete with a fresh context.
 	t.Cleanup(func() {
@@ -103,34 +119,15 @@ func createModel(t *testing.T, object *unstructured.Unstructured) {
 	})
 }
 
-// updateModel applies mutate to the latest stored copy of object and writes it back.
-func updateModel(
-	ctx context.Context, object *unstructured.Unstructured, mutate func(*unstructured.Unstructured) error,
-) error {
-	latest := &unstructured.Unstructured{}
-	latest.SetGroupVersionKind(object.GroupVersionKind())
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(object), latest); err != nil {
+// updateModel reads the stored object of the given kind and name, applies mutate, and writes it
+// back. It reads into a new object because decoding does not clear fields that the stored copy lacks.
+func updateModel(ctx context.Context, kind, name string, mutate func(client.Object)) error {
+	latest := modelObject(kind, name, fusioninferiov1alpha1.ModelSpec{})
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(latest), latest); err != nil {
 		return err
 	}
-	if err := mutate(latest); err != nil {
-		return err
-	}
+	mutate(latest)
 	return k8sClient.Update(ctx, latest)
-}
-
-// setField returns a mutation that sets the field at the given path to value.
-func setField(value any, fields ...string) func(*unstructured.Unstructured) error {
-	return func(object *unstructured.Unstructured) error {
-		return unstructured.SetNestedField(object.Object, value, fields...)
-	}
-}
-
-// removeField returns a mutation that deletes the field at the given path.
-func removeField(fields ...string) func(*unstructured.Unstructured) error {
-	return func(object *unstructured.Unstructured) error {
-		unstructured.RemoveNestedField(object.Object, fields...)
-		return nil
-	}
 }
 
 // expectInvalid checks that the API server rejected the request as Invalid and mentioned message.
@@ -167,7 +164,7 @@ func TestModelAcceptsSupportedSourceURIs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, "default", sourceSpec(tt.uri)))
+			createModel(t, modelObject("Model", tt.name, sourceSpec(tt.uri)))
 		})
 	}
 }
@@ -208,7 +205,7 @@ func TestModelRejectsInvalidSourceURIs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			object := modelObject("Model", tt.name, "default", sourceSpec(tt.uri))
+			object := modelObject("Model", tt.name, sourceSpec(tt.uri))
 			expectInvalid(t, k8sClient.Create(t.Context(), object), tt.message)
 		})
 	}
@@ -220,19 +217,20 @@ func TestModelAcceptsCredentialsAndPrefetch(t *testing.T) {
 	tests := []struct {
 		desc string
 		name string
-		spec map[string]any
+		spec fusioninferiov1alpha1.ModelSpec
 	}{
-		{"credentials", "spec-credentials", credentialsSpec(map[string]any{"name": "huggingface-token"})},
-		{"prefetch to every node", "spec-prefetch-all", prefetchSpec(map[string]any{})},
-		{"prefetch by node selector", "spec-prefetch-selector", prefetchSpec(map[string]any{
-			"nodeSelector": map[string]any{"node.kubernetes.io/instance-type": "gpu-h100"},
+		{"credentials", "spec-credentials", credentialsSpec("huggingface-token")},
+		{"prefetch to every node", "spec-prefetch-all", prefetchSpec(fusioninferiov1alpha1.PrefetchSpec{})},
+		{"prefetch by node selector", "spec-prefetch-selector", prefetchSpec(fusioninferiov1alpha1.PrefetchSpec{
+			NodeSelector: map[string]string{"node.kubernetes.io/instance-type": "gpu-h100"},
 		})},
-		{"prefetch by node name", "spec-prefetch-node", prefetchSpec(map[string]any{"nodeName": "gpu-node-1"})},
+		{"prefetch by node name", "spec-prefetch-node",
+			prefetchSpec(fusioninferiov1alpha1.PrefetchSpec{NodeName: "gpu-node-1"})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, "default", tt.spec))
+			createModel(t, modelObject("Model", tt.name, tt.spec))
 		})
 	}
 }
@@ -244,24 +242,24 @@ func TestModelRejectsInvalidDeclarations(t *testing.T) {
 	tests := []struct {
 		desc    string
 		name    string
-		spec    map[string]any
+		spec    fusioninferiov1alpha1.ModelSpec
 		message string
 	}{
 		{"invalid credential name", "bad-credentials-invalid",
-			credentialsSpec(map[string]any{"name": "Not Valid"}), "spec.source.credentialsRef.name"},
-		{"prefetch with nodeSelector and nodeName", "bad-prefetch-both", prefetchSpec(map[string]any{
-			"nodeSelector": map[string]any{"node.kubernetes.io/instance-type": "gpu-h100"},
-			"nodeName":     "gpu-node-1",
+			credentialsSpec("Not Valid"), "spec.source.credentialsRef.name"},
+		{"prefetch with nodeSelector and nodeName", "bad-prefetch-both", prefetchSpec(fusioninferiov1alpha1.PrefetchSpec{
+			NodeSelector: map[string]string{"node.kubernetes.io/instance-type": "gpu-h100"},
+			NodeName:     "gpu-node-1",
 		}), "nodeSelector and nodeName are mutually exclusive"},
 		{"prefetch with an invalid nodeName", "bad-prefetch-node",
-			prefetchSpec(map[string]any{"nodeName": "Not Valid"}), "spec.prefetch.nodeName"},
+			prefetchSpec(fusioninferiov1alpha1.PrefetchSpec{NodeName: "Not Valid"}), "spec.prefetch.nodeName"},
 		{"invalid LoRA reference name", "bad-lora-invalid",
-			loraSpec(map[string]any{"kind": "Model", "name": "not/a/name"}), "spec.lora.baseModelRef.name"},
+			loraSpec("Model", "not/a/name"), "spec.lora.baseModelRef.name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			object := modelObject("Model", tt.name, "default", tt.spec)
+			object := modelObject("Model", tt.name, tt.spec)
 			expectInvalid(t, k8sClient.Create(t.Context(), object), tt.message)
 		})
 	}
@@ -281,10 +279,7 @@ func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, "default", loraSpec(map[string]any{
-				"kind": tt.kind,
-				"name": "qwen3-8b",
-			})))
+			createModel(t, modelObject("Model", tt.name, loraSpec(tt.kind, "qwen3-8b")))
 		})
 	}
 }
@@ -292,15 +287,9 @@ func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 // TestClusterModelLoRAMustReferenceClusterModel checks that a cluster-scoped LoRA can only reference a ClusterModel.
 func TestClusterModelLoRAMustReferenceClusterModel(t *testing.T) {
 	t.Parallel()
-	createModel(t, modelObject("ClusterModel", "cluster-lora-cluster-ref", "", loraSpec(map[string]any{
-		"kind": "ClusterModel",
-		"name": "qwen3-8b",
-	})))
+	createModel(t, modelObject("ClusterModel", "cluster-lora-cluster-ref", loraSpec("ClusterModel", "qwen3-8b")))
 
-	object := modelObject("ClusterModel", "cluster-lora-model-ref", "", loraSpec(map[string]any{
-		"kind": "Model",
-		"name": "qwen3-8b",
-	}))
+	object := modelObject("ClusterModel", "cluster-lora-model-ref", loraSpec("Model", "qwen3-8b"))
 	expectInvalid(t, k8sClient.Create(t.Context(), object), "cluster-scoped LoRA artifacts must reference a ClusterModel")
 }
 
@@ -308,56 +297,53 @@ func TestClusterModelLoRAMustReferenceClusterModel(t *testing.T) {
 // metadata, credentialsRef and prefetch can; uri and lora cannot.
 func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		kind      string
-		namespace string
-	}{
-		{"Model", "default"},
-		{"ClusterModel", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.kind, func(t *testing.T) {
+	for _, kind := range []string{"Model", "ClusterModel"} {
+		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			suffix := strings.ToLower(tt.kind)
-			baseRef := map[string]any{"kind": "ClusterModel", "name": "qwen3-8b"}
-			base := modelObject(tt.kind, "update-base-"+suffix, tt.namespace, sourceSpec(hfModelURI))
-			createModel(t, base)
-			adapter := modelObject(tt.kind, "update-lora-"+suffix, tt.namespace, loraSpec(baseRef))
-			createModel(t, adapter)
+			suffix := strings.ToLower(kind)
+			base := "update-base-" + suffix
+			createModel(t, modelObject(kind, base, sourceSpec(hfModelURI)))
+			adapter := "update-lora-" + suffix
+			createModel(t, modelObject(kind, adapter, loraSpec("ClusterModel", "qwen3-8b")))
 
 			// Updates that must succeed, applied to base in order.
 			allowed := []struct {
 				desc   string
-				mutate func(*unstructured.Unstructured) error
+				mutate func(client.Object)
 			}{
-				{"metadata", func(object *unstructured.Unstructured) error {
+				{"metadata", func(object client.Object) {
 					object.SetAnnotations(map[string]string{"fusioninfer.io/test": "metadata-update"})
-					return nil
 				}},
-				{"credentialsRef", setField(map[string]any{"name": "huggingface-token"}, "spec", "source", "credentialsRef")},
-				{"prefetch", setField(map[string]any{"nodeName": "gpu-node-1"}, "spec", "prefetch")},
-				{"prefetch removal", removeField("spec", "prefetch")},
+				{"credentialsRef", func(object client.Object) {
+					specOf(object).Source.CredentialsRef = &fusioninferiov1alpha1.SecretReference{Name: "huggingface-token"}
+				}},
+				{"prefetch", func(object client.Object) {
+					specOf(object).Prefetch = &fusioninferiov1alpha1.PrefetchSpec{NodeName: "gpu-node-1"}
+				}},
+				{"prefetch removal", func(object client.Object) { specOf(object).Prefetch = nil }},
 			}
 			for _, update := range allowed {
-				if err := updateModel(ctx, base, update.mutate); err != nil {
+				if err := updateModel(ctx, kind, base, update.mutate); err != nil {
 					t.Errorf("update %s: %v", update.desc, err)
 				}
 			}
 
 			// Updates that the immutability rules must reject.
 			rejected := []struct {
-				object  *unstructured.Unstructured
-				mutate  func(*unstructured.Unstructured) error
+				name    string
+				mutate  func(client.Object)
 				message string
 			}{
-				{base, setField(hfModelURI+"@main", "spec", "source", "uri"), "uri is immutable"},
-				{base, setField(map[string]any{"baseModelRef": baseRef}, "spec", "lora"), "lora cannot be added or removed"},
-				{adapter, setField("qwen3-14b", "spec", "lora", "baseModelRef", "name"), "lora is immutable"},
-				{adapter, removeField("spec", "lora"), "lora cannot be added or removed"},
+				{base, func(object client.Object) { specOf(object).Source.URI = hfModelURI + "@main" }, "uri is immutable"},
+				{base, func(object client.Object) { specOf(object).LoRA = loraSpec("ClusterModel", "qwen3-8b").LoRA },
+					"lora cannot be added or removed"},
+				{adapter, func(object client.Object) { specOf(object).LoRA.BaseModelRef.Name = "qwen3-14b" },
+					"lora is immutable"},
+				{adapter, func(object client.Object) { specOf(object).LoRA = nil }, "lora cannot be added or removed"},
 			}
 			for _, update := range rejected {
-				expectInvalid(t, updateModel(ctx, update.object, update.mutate), update.message)
+				expectInvalid(t, updateModel(ctx, kind, update.name, update.mutate), update.message)
 			}
 		})
 	}
