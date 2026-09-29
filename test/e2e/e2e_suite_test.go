@@ -20,73 +20,87 @@ limitations under the License.
 package e2e
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/e2e-framework/pkg/env"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
+	"sigs.k8s.io/e2e-framework/support"
+	"sigs.k8s.io/e2e-framework/support/kind"
 
 	"github.com/fusioninfer/fusioninfer/test/utils"
 )
 
 var (
 	// Optional Environment Variables:
-	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
-	// These variables are useful if CertManager is already installed, avoiding
-	// re-installation and conflicts.
-	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
-	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
-	isCertManagerAlreadyInstalled = false
+	// - E2E_ARTIFACTS_DIR=<dir>: Saves the controller-manager logs and manifest, the
+	//   Kubernetes events, and the curl-metrics pod logs to <dir> before the teardown.
+	artifactsDir = os.Getenv("E2E_ARTIFACTS_DIR")
+	// - KIND_CLUSTER=<name> and KIND=<path>: The Kind cluster to run on, which is created
+	//   if it does not exist, and the kind binary. make test-e2e sets both.
+	kindCluster = cmp.Or(os.Getenv("KIND_CLUSTER"), "fusioninfer-test-e2e")
+	kindBinary  = os.Getenv("KIND")
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "example.com/fusioninfer:v0.0.1"
+
+	testenv env.Environment
+	// clientset reads pod logs and requests service account tokens, which the
+	// e2e-framework client does not support.
+	clientset kubernetes.Interface
 )
 
-// TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
+// TestMain runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purpose of being used in CI jobs.
-// The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
-// CertManager.
-func TestE2E(t *testing.T) {
-	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting fusioninfer integration test suite\n")
-	RunSpecs(t, "e2e suite")
+// The default setup requires Kind and builds/loads the Manager Docker image locally.
+func TestMain(m *testing.M) {
+	var err error
+	testenv, err = env.NewFromFlags()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create test environment: %v\n", err)
+		os.Exit(1)
+	}
+	testenv.Setup(
+		useKindCluster,
+		buildManagerImage,
+		envfuncs.LoadImageToCluster(kindCluster, projectImage),
+	)
+
+	fmt.Println("Starting fusioninfer integration test suite")
+	os.Exit(testenv.Run(m))
 }
 
-var _ = BeforeSuite(func() {
-	By("building the manager(Operator) image")
+// useKindCluster connects the tests to the Kind cluster, creating it if it does not exist, and
+// points the make targets at it through KUBECONFIG.
+func useKindCluster(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+	var opts []support.ClusterOpts
+	if kindBinary != "" {
+		opts = append(opts, kind.WithPath(kindBinary))
+	}
+	ctx, err := envfuncs.CreateClusterWithOpts(kind.NewProvider(), kindCluster, opts...)(ctx, cfg)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to use Kind cluster %q: %w", kindCluster, err)
+	}
+	if err := os.Setenv("KUBECONFIG", cfg.KubeconfigFile()); err != nil {
+		return ctx, err
+	}
+	clientset, err = kubernetes.NewForConfig(cfg.Client().RESTConfig())
+	return ctx, err
+}
+
+// buildManagerImage builds the manager image from the working tree.
+func buildManagerImage(ctx context.Context, _ *envconf.Config) (context.Context, error) {
+	fmt.Println("building the manager(Operator) image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
-
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
-	By("loading the manager(Operator) image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
-
-	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
-	// To prevent errors when tests run in environments with CertManager already installed,
-	// we check for its presence before execution.
-	// Setup CertManager before the suite if not skipped and if not already installed
-	if !skipCertManagerInstall {
-		By("checking if cert manager is installed already")
-		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
-		if !isCertManagerAlreadyInstalled {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-		} else {
-			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
-		}
+	if _, err := utils.Run(cmd); err != nil {
+		return ctx, fmt.Errorf("failed to build the manager(Operator) image: %w", err)
 	}
-})
-
-var _ = AfterSuite(func() {
-	// Teardown CertManager after the suite if not skipped and if it was not already installed
-	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
-		utils.UninstallCertManager()
-	}
-})
+	return ctx, nil
+}

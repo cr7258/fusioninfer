@@ -28,7 +28,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.3.0
+          version: v2.11.4
 
   test:
     name: Unit Tests
@@ -67,12 +67,8 @@ jobs:
             exit 1
           fi
 
-      - name: Setup envtest
-        run: make setup-envtest
-
       - name: Run unit tests
-        run: |
-          KUBEBUILDER_ASSETS="$(./bin/setup-envtest use -p path)" go test ./... -coverprofile cover.out -covermode=atomic
+        run: make test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -100,6 +96,45 @@ jobs:
 
       - name: Build Docker image
         run: make docker-build
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KIND_VERSION: v0.33.0
+      E2E_ARTIFACTS_DIR: /tmp/e2e-artifacts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kind
+        run: |
+          curl -sSLo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Run e2e tests
+        run: make test-e2e KEEP_KIND_CLUSTER=true
+
+      - name: Export Kind logs
+        if: always()
+        run: kind export logs "${E2E_ARTIFACTS_DIR}/kind" --name fusioninfer-test-e2e || true
+
+      - name: Upload e2e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: ${{ env.E2E_ARTIFACTS_DIR }}
+          if-no-files-found: warn
 
   docs:
     name: Docs Site

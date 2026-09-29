@@ -24,16 +24,30 @@ import (
 
 // RoleApplyConfiguration represents a declarative configuration of the Role type for use
 // with apply.
+//
+// Role defines a component in the inference pipeline
 type RoleApplyConfiguration struct {
-	Name                 *string                       `json:"name,omitempty"`
-	ComponentType        *corev1alpha1.ComponentType   `json:"componentType,omitempty"`
-	Strategy             *corev1alpha1.RoutingStrategy `json:"strategy,omitempty"`
-	HTTPRoute            *runtime.RawExtension         `json:"httproute,omitempty"`
-	Gateway              *runtime.RawExtension         `json:"gateway,omitempty"`
-	EndpointPickerConfig *string                       `json:"endpointPickerConfig,omitempty"`
-	Replicas             *int32                        `json:"replicas,omitempty"`
-	Multinode            *MultinodeApplyConfiguration  `json:"multinode,omitempty"`
-	Template             *runtime.RawExtension         `json:"template,omitempty"`
+	// Name is the identifier for this role
+	Name *string `json:"name,omitempty"`
+	// ComponentType specifies the type of component
+	ComponentType *corev1alpha1.ComponentType `json:"componentType,omitempty"`
+	// Strategy defines the routing strategy for the router component
+	Strategy *corev1alpha1.RoutingStrategy `json:"strategy,omitempty"`
+	// HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API HTTPRouteSpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
+	HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
+	// Gateway defines the Gateway spec for this router (Gateway API GatewaySpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
+	Gateway *runtime.RawExtension `json:"gateway,omitempty"`
+	// EndpointPickerConfig is raw YAML for advanced EndpointPickerConfig customization
+	EndpointPickerConfig *string `json:"endpointPickerConfig,omitempty"`
+	// Replicas defines the number of replicas for this component
+	Replicas *int32 `json:"replicas,omitempty"`
+	// Multinode enables multi-node distributed inference
+	Multinode *MultinodeApplyConfiguration `json:"multinode,omitempty"`
+	// Template defines the pod spec for this component (corev1.PodTemplateSpec)
+	// Use runtime.RawExtension to avoid CRD size limits
+	Template *runtime.RawExtension `json:"template,omitempty"`
 }
 
 // RoleApplyConfiguration constructs a declarative configuration of the Role type for use with

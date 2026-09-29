@@ -1,13 +1,14 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  build-tags:
+    - e2e
 linters:
   default: none
   enable:
     - copyloopvar
     - dupl
     - errcheck
-    - ginkgolinter
     - goconst
     - gocyclo
     - govet

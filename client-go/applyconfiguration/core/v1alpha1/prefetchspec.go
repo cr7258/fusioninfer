@@ -19,9 +19,14 @@ package v1alpha1
 
 // PrefetchSpecApplyConfiguration represents a declarative configuration of the PrefetchSpec type for use
 // with apply.
+//
+// PrefetchSpec declares the nodes to download a model to before it is needed.
+// An empty PrefetchSpec selects every node that runs the model agent.
 type PrefetchSpecApplyConfiguration struct {
+	// NodeSelector selects the nodes whose labels match all of the given labels.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	NodeName     *string           `json:"nodeName,omitempty"`
+	// NodeName selects a single node by name.
+	NodeName *string `json:"nodeName,omitempty"`
 }
 
 // PrefetchSpecApplyConfiguration constructs a declarative configuration of the PrefetchSpec type for use with

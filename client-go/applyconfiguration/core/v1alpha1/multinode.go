@@ -19,7 +19,10 @@ package v1alpha1
 
 // MultinodeApplyConfiguration represents a declarative configuration of the Multinode type for use
 // with apply.
+//
+// MultinodeSpec enables multi-node distributed inference.
 type MultinodeApplyConfiguration struct {
+	// NodeCount is the number of distinct nodes to distribute this component across.
 	NodeCount *int32 `json:"nodeCount,omitempty"`
 }
 

@@ -19,10 +19,15 @@ package v1alpha1
 
 // PrefetchStatusApplyConfiguration represents a declarative configuration of the PrefetchStatus type for use
 // with apply.
+//
+// PrefetchStatus reports download progress on the nodes selected by prefetch.
 type PrefetchStatusApplyConfiguration struct {
+	// DesiredNodes is the number of nodes selected by prefetch.
 	DesiredNodes *int32 `json:"desiredNodes,omitempty"`
-	ReadyNodes   *int32 `json:"readyNodes,omitempty"`
-	FailedNodes  *int32 `json:"failedNodes,omitempty"`
+	// ReadyNodes is the number of selected nodes that have downloaded the model.
+	ReadyNodes *int32 `json:"readyNodes,omitempty"`
+	// FailedNodes is the number of selected nodes that failed to download the model.
+	FailedNodes *int32 `json:"failedNodes,omitempty"`
 }
 
 // PrefetchStatusApplyConfiguration constructs a declarative configuration of the PrefetchStatus type for use with

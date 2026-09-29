@@ -19,8 +19,15 @@ package v1alpha1
 
 // ModelSourceApplyConfiguration represents a declarative configuration of the ModelSource type for use
 // with apply.
+//
+// ModelSource declares where a model artifact is stored and the Secret used to access it.
 type ModelSourceApplyConfiguration struct {
-	URI            *string                            `json:"uri,omitempty"`
+	// URI is the model artifact location. The version, when present, is part of the URI:
+	// hf://<owner>/<repo>[@<revision>], s3://<bucket>/<prefix>, or
+	// oci://<registry>/<repository>[:<tag>|@sha256:<digest>].
+	URI *string `json:"uri,omitempty"`
+	// CredentialsRef names the Secret used to access the source.
+	// When omitted, the source is accessed anonymously.
 	CredentialsRef *SecretReferenceApplyConfiguration `json:"credentialsRef,omitempty"`
 }
 

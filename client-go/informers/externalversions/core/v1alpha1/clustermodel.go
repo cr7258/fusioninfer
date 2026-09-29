@@ -55,7 +55,7 @@ func NewClusterModelInformer(client versioned.Interface, resyncPeriod time.Durat
 // one. This reduces memory footprint and number of connections to the server.
 func NewFilteredClusterModelInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
@@ -80,7 +80,7 @@ func NewFilteredClusterModelInformer(client versioned.Interface, resyncPeriod ti
 				}
 				return client.FusioninferV1alpha1().ClusterModels().Watch(ctx, options)
 			},
-		},
+		}, client),
 		&apicorev1alpha1.ClusterModel{},
 		resyncPeriod,
 		indexers,
