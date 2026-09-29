@@ -39,16 +39,25 @@ import (
 	"github.com/fusioninfer/fusioninfer/test/utils"
 )
 
+// k8sClient reads and writes straight through the API server, not the manager's cache, and is
+// shared by all tests in the package.
 var k8sClient client.Client
 
+// TestMain starts envtest and the InferenceService controller once for the package, runs the
+// tests, and stops both.
 func TestMain(m *testing.M) {
+	// os.Exit skips deferred calls, so the work happens in run, whose defers stop envtest first.
 	os.Exit(run(m))
 }
 
+// run starts envtest and a manager that runs the InferenceService controller, so the tests
+// observe real reconciliation. The ModelLoader test calls Reconcile directly instead.
 func run(m *testing.M) int {
+	// Controller logs go to stderr, which go test prints when a test fails or with -v.
 	logf.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
-	// Register all schemes
+	// scheme.Scheme already has the built-in types. Add the FusionInfer types and the
+	// third-party types that the controller creates.
 	for _, addToScheme := range []func(*runtime.Scheme) error{
 		fusioninferiov1alpha1.AddToScheme,
 		lwsv1.AddToScheme,
@@ -62,12 +71,17 @@ func run(m *testing.M) int {
 		}
 	}
 
+	// envtest runs only etcd and kube-apiserver. Without a garbage collector, the objects that
+	// the controller creates outlive their InferenceService, so each test uses its own name.
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
-			filepath.Join("..", "..", "config", "crd", "external"), // External CRDs (LWS, InferencePool, etc.)
+			// CRDs of the LWS, Volcano, Gateway API and Inference Extension resources that the
+			// controller creates. Its watches fail without them.
+			filepath.Join("..", "..", "config", "crd", "external"),
 		},
-		ErrorIfCRDPathMissing: false, // Allow missing external CRDs for now
+		ErrorIfCRDPathMissing: false,
+		// Lets the tests run from an IDE; KUBEBUILDER_ASSETS, set by make test, takes precedence.
 		BinaryAssetsDirectory: utils.LatestEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
 	cfg, err := testEnv.Start()
@@ -102,6 +116,7 @@ func run(m *testing.M) int {
 		return 1
 	}
 
+	// The manager reconciles in the background while the tests run.
 	ctx, cancel := context.WithCancel(context.Background())
 	mgrErr := make(chan error, 1)
 	go func() {
@@ -109,6 +124,8 @@ func run(m *testing.M) int {
 	}()
 
 	code := m.Run()
+	// Stop the manager and wait for it to exit, so that it is gone before the deferred
+	// testEnv.Stop shuts down the API server.
 	cancel()
 	if err := <-mgrErr; err != nil {
 		fmt.Fprintf(os.Stderr, "manager: %v\n", err)
