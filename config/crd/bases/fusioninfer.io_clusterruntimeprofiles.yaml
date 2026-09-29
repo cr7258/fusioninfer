@@ -1,0 +1,170 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: clusterruntimeprofiles.fusioninfer.io
+spec:
+  group: fusioninfer.io
+  names:
+    kind: ClusterRuntimeProfile
+    listKind: ClusterRuntimeProfileList
+    plural: clusterruntimeprofiles
+    singular: clusterruntimeprofile
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ClusterRuntimeProfile declares a cluster-scoped inference runtime template that InferenceDeployments
+          in every namespace can use.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec declares the runtime.
+            properties:
+              aggregated:
+                description: Aggregated declares the role of aggregated inference,
+                  where each replica runs both prefill and decode.
+                properties:
+                  multinode:
+                    description: |-
+                      Multinode spreads each logical replica over several nodes: a leader and nodeCount - 1 workers,
+                      all created from podTemplate. When omitted, each logical replica is a single Pod.
+                    properties:
+                      nodeCount:
+                        description: NodeCount is the number of nodes in each logical
+                          replica, including the leader.
+                        format: int32
+                        minimum: 2
+                        type: integer
+                    required:
+                    - nodeCount
+                    type: object
+                  podTemplate:
+                    description: |-
+                      PodTemplate is the corev1.PodTemplateSpec of the role. The CRD keeps it schemaless to avoid
+                      embedding the full Pod schema, so consumers decode and validate it strictly.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - podTemplate
+                type: object
+              backend:
+                description: Backend selects the inference engine adapter. All roles
+                  use the same backend.
+                enum:
+                - vllm
+                - sglang
+                - trtllm
+                type: string
+              decoder:
+                description: Decoder declares the decode role of Prefill/Decode disaggregation.
+                properties:
+                  multinode:
+                    description: |-
+                      Multinode spreads each logical replica over several nodes: a leader and nodeCount - 1 workers,
+                      all created from podTemplate. When omitted, each logical replica is a single Pod.
+                    properties:
+                      nodeCount:
+                        description: NodeCount is the number of nodes in each logical
+                          replica, including the leader.
+                        format: int32
+                        minimum: 2
+                        type: integer
+                    required:
+                    - nodeCount
+                    type: object
+                  podTemplate:
+                    description: |-
+                      PodTemplate is the corev1.PodTemplateSpec of the role. The CRD keeps it schemaless to avoid
+                      embedding the full Pod schema, so consumers decode and validate it strictly.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - podTemplate
+                type: object
+              lora:
+                description: |-
+                  LoRA declares that the runtime can serve LoRA adapters and how it loads them.
+                  When omitted, the runtime does not accept LoRA bindings.
+                properties:
+                  loadingMode:
+                    description: LoadingMode is when the runtime loads the adapters.
+                    enum:
+                    - preload
+                    - dynamic
+                    type: string
+                  maxLoadedAdapters:
+                    description: |-
+                      MaxLoadedAdapters is the maximum number of adapters that one InferenceDeployment can bind.
+                      It is a control-plane limit and does not replace the capacity settings of the engine.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                required:
+                - loadingMode
+                - maxLoadedAdapters
+                type: object
+              prefiller:
+                description: Prefiller declares the prefill role of Prefill/Decode
+                  disaggregation.
+                properties:
+                  multinode:
+                    description: |-
+                      Multinode spreads each logical replica over several nodes: a leader and nodeCount - 1 workers,
+                      all created from podTemplate. When omitted, each logical replica is a single Pod.
+                    properties:
+                      nodeCount:
+                        description: NodeCount is the number of nodes in each logical
+                          replica, including the leader.
+                        format: int32
+                        minimum: 2
+                        type: integer
+                    required:
+                    - nodeCount
+                    type: object
+                  podTemplate:
+                    description: |-
+                      PodTemplate is the corev1.PodTemplateSpec of the role. The CRD keeps it schemaless to avoid
+                      embedding the full Pod schema, so consumers decode and validate it strictly.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - podTemplate
+                type: object
+            required:
+            - backend
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+            - message: set aggregated, or prefiller and decoder
+              rule: has(self.aggregated) || has(self.prefiller) || has(self.decoder)
+            - message: aggregated cannot be combined with prefiller or decoder
+              rule: '!has(self.aggregated) || (!has(self.prefiller) && !has(self.decoder))'
+            - message: prefiller and decoder must be set together
+              rule: has(self.prefiller) == has(self.decoder)
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true

@@ -1,0 +1,41 @@
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterRuntimeProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: vllm-pd-r1
+spec:
+  backend: vllm
+  prefiller:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: vllm/vllm-openai:v0.27.1
+            args:
+              - $(FUSION_MODEL_PATH)
+              - --kv-transfer-config
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+  decoder:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: vllm/vllm-openai:v0.27.1
+            args:
+              - $(FUSION_MODEL_PATH)
+              - --kv-transfer-config
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
