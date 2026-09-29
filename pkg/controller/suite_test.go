@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
@@ -80,7 +81,7 @@ func run(m *testing.M) int {
 			// controller creates. Its watches fail without them.
 			filepath.Join("..", "..", "config", "crd", "external"),
 		},
-		ErrorIfCRDPathMissing: false,
+		ErrorIfCRDPathMissing: true,
 		// Lets the tests run from an IDE; KUBEBUILDER_ASSETS, set by make test, takes precedence.
 		BinaryAssetsDirectory: utils.LatestEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")),
 	}
@@ -103,6 +104,9 @@ func run(m *testing.M) int {
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
+		// Disables the metrics server, which would otherwise listen on :8080 and fail the
+		// manager if another process uses that port.
+		Metrics: metricsserver.Options{BindAddress: "0"},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create manager: %v\n", err)
