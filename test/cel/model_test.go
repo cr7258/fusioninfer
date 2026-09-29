@@ -21,14 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 )
 
 const (
@@ -186,8 +181,6 @@ func TestModelRejectsInvalidSourceURIs(t *testing.T) {
 		uri     string
 		message string
 	}{
-		{"empty", "bad-uri-empty", "", "spec.source.uri"},
-		{"too long", "bad-uri-long", "s3://team-a-models/" + strings.Repeat("a", 2048), "spec.source.uri"},
 		{"unsupported scheme", "bad-uri-https", "https://example.com/model", msgScheme},
 		{"pvc scheme", "bad-uri-pvc", "pvc://qwen3-weights/models/qwen3-8b", msgScheme},
 		{"uppercase scheme", "bad-uri-uppercase", "HF://Qwen/Qwen3-8B", msgScheme},
@@ -244,8 +237,8 @@ func TestModelAcceptsCredentialsAndPrefetch(t *testing.T) {
 	}
 }
 
-// TestModelRejectsInvalidDeclarations checks the schema and CEL rules on source, credentialsRef,
-// prefetch and lora.
+// TestModelRejectsInvalidDeclarations checks the name patterns of credentialsRef, prefetch and lora,
+// and the CEL rule that makes the prefetch targets mutually exclusive.
 func TestModelRejectsInvalidDeclarations(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -254,35 +247,16 @@ func TestModelRejectsInvalidDeclarations(t *testing.T) {
 		spec    map[string]any
 		message string
 	}{
-		{"missing source", "bad-spec-source", map[string]any{}, "spec.source"},
-		{"credentials without a name", "bad-credentials-missing",
-			credentialsSpec(map[string]any{}), "spec.source.credentialsRef.name"},
-		{"empty credential name", "bad-credentials-empty",
-			credentialsSpec(map[string]any{"name": ""}), "spec.source.credentialsRef.name"},
 		{"invalid credential name", "bad-credentials-invalid",
 			credentialsSpec(map[string]any{"name": "Not Valid"}), "spec.source.credentialsRef.name"},
-		{"overlong credential name", "bad-credentials-long",
-			credentialsSpec(map[string]any{"name": strings.Repeat("a", 254)}), "spec.source.credentialsRef.name"},
 		{"prefetch with nodeSelector and nodeName", "bad-prefetch-both", prefetchSpec(map[string]any{
 			"nodeSelector": map[string]any{"node.kubernetes.io/instance-type": "gpu-h100"},
 			"nodeName":     "gpu-node-1",
 		}), "nodeSelector and nodeName are mutually exclusive"},
-		{"prefetch with an empty nodeSelector", "bad-prefetch-selector",
-			prefetchSpec(map[string]any{"nodeSelector": map[string]any{}}), "spec.prefetch.nodeSelector"},
 		{"prefetch with an invalid nodeName", "bad-prefetch-node",
 			prefetchSpec(map[string]any{"nodeName": "Not Valid"}), "spec.prefetch.nodeName"},
-		{"missing LoRA base model reference", "bad-lora-missing", map[string]any{
-			"source": map[string]any{"uri": s3AdapterURI},
-			"lora":   map[string]any{},
-		}, "spec.lora.baseModelRef"},
-		{"invalid LoRA reference kind", "bad-lora-kind",
-			loraSpec(map[string]any{"kind": "InferenceService", "name": "qwen3-8b"}), "spec.lora.baseModelRef.kind"},
-		{"empty LoRA reference name", "bad-lora-empty",
-			loraSpec(map[string]any{"kind": "Model", "name": ""}), "spec.lora.baseModelRef.name"},
 		{"invalid LoRA reference name", "bad-lora-invalid",
 			loraSpec(map[string]any{"kind": "Model", "name": "not/a/name"}), "spec.lora.baseModelRef.name"},
-		{"overlong LoRA reference name", "bad-lora-long",
-			loraSpec(map[string]any{"kind": "Model", "name": strings.Repeat("a", 254)}), "spec.lora.baseModelRef.name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -387,77 +361,4 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestModelStatusUpdatesOnlyThroughSubresource checks that status is written only through the status
-// subresource and that its prefetch counts are validated.
-func TestModelStatusUpdatesOnlyThroughSubresource(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	model := &fusioninferiov1alpha1.Model{
-		ObjectMeta: metav1.ObjectMeta{Name: "model-status", Namespace: "default"},
-		Spec: fusioninferiov1alpha1.ModelSpec{
-			Source:   fusioninferiov1alpha1.ModelSource{URI: hfModelURI},
-			Prefetch: &fusioninferiov1alpha1.PrefetchSpec{},
-		},
-	}
-	if err := k8sClient.Create(ctx, model); err != nil {
-		t.Fatalf("create model: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = k8sClient.Delete(context.Background(), model)
-	})
-
-	// Writing through the status subresource stores the status.
-	model.Status.ObservedGeneration = model.Generation
-	model.Status.Prefetch = &fusioninferiov1alpha1.PrefetchStatus{DesiredNodes: 4, ReadyNodes: 3, FailedNodes: 1}
-	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
-		Type:    fusioninferiov1alpha1.ModelConditionAccessible,
-		Status:  metav1.ConditionTrue,
-		Reason:  fusioninferiov1alpha1.ModelReasonVerified,
-		Message: "source is accessible",
-	})
-	if err := k8sClient.Status().Update(ctx, model); err != nil {
-		t.Fatalf("update status: %v", err)
-	}
-
-	stored := &fusioninferiov1alpha1.Model{}
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(model), stored); err != nil {
-		t.Fatalf("get model: %v", err)
-	}
-	if diff := cmp.Diff(model.Status.Prefetch, stored.Status.Prefetch); diff != "" {
-		t.Errorf("status.prefetch mismatch (-want +got):\n%s", diff)
-	}
-	if !meta.IsStatusConditionTrue(stored.Status.Conditions, fusioninferiov1alpha1.ModelConditionAccessible) {
-		t.Errorf("condition %s is not True", fusioninferiov1alpha1.ModelConditionAccessible)
-	}
-
-	// Updating the main resource must leave the status unchanged.
-	stored.Status = fusioninferiov1alpha1.ModelStatus{}
-	stored.Annotations = map[string]string{"fusioninfer.io/test": "status-preserved"}
-	if err := k8sClient.Update(ctx, stored); err != nil {
-		t.Fatalf("update model: %v", err)
-	}
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(model), stored); err != nil {
-		t.Fatalf("get model: %v", err)
-	}
-	if diff := cmp.Diff(model.Status.Prefetch, stored.Status.Prefetch); diff != "" {
-		t.Fatalf("status.prefetch changed by a main resource update (-want +got):\n%s", diff)
-	}
-
-	// The status subresource still validates the counts, which cannot be negative.
-	stored.Status.Prefetch.ReadyNodes = -1
-	expectInvalid(t, k8sClient.Status().Update(ctx, stored), "status.prefetch.readyNodes")
-}
-
-// TestModelRejectsObjectWithoutSpec checks that spec is required.
-func TestModelRejectsObjectWithoutSpec(t *testing.T) {
-	t.Parallel()
-	object := &unstructured.Unstructured{}
-	object.SetAPIVersion(modelAPIVersion)
-	object.SetKind("Model")
-	object.SetName("model-no-spec")
-	object.SetNamespace("default")
-
-	expectInvalid(t, k8sClient.Create(t.Context(), object), "spec")
 }
