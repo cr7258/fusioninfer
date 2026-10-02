@@ -146,7 +146,13 @@ flowchart TB
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
-`spec.lora` 声明 RuntimeProfile 的 LoRA 配置。下面的示例使用动态加载，每个 InferenceDeployment 最多绑定 8 个 LoRA：
+`spec.lora` 声明 RuntimeProfile 的 LoRA 配置：
+
+- `loadingMode: preload`：引擎启动时加载全部 LoRA，绑定变化会生成新的 workload revision。
+- `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
+- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
+
+下面的示例以 `dynamic` 方式加载 LoRA，每个 InferenceDeployment 最多绑定 8 个 LoRA：
 
 ```yaml
 spec:
@@ -165,10 +171,6 @@ spec:
               - --max-loras
               - "8"
 ```
-
-- `loadingMode: preload`：引擎启动时加载全部 LoRA，绑定变化会生成新的 workload revision。
-- `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
-- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
 
 `lora` 位于 Profile 顶层，所有角色使用同一种加载方式。Controller 如何加载和卸载 LoRA，见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
 

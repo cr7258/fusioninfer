@@ -146,7 +146,13 @@ The two backends start across nodes as follows:
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 
-`spec.lora` declares the LoRA configuration of the RuntimeProfile. The following example uses dynamic loading, and each InferenceDeployment can bind up to 8 LoRAs:
+`spec.lora` declares the LoRA configuration of the RuntimeProfile:
+
+- `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings produces a new workload revision.
+- `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.
+- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
+
+The following example loads LoRAs in `dynamic` mode, and each InferenceDeployment can bind up to 8 LoRAs:
 
 ```yaml
 spec:
@@ -165,10 +171,6 @@ spec:
               - --max-loras
               - "8"
 ```
-
-- `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings produces a new workload revision.
-- `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.
-- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
 
 `lora` sits at the top level of the Profile, so all roles use the same loading mode. For how the Controller loads and unloads LoRAs, see [InferenceDeployment: LoRA Bindings](./inference-deployment.md#lora-bindings).
 
