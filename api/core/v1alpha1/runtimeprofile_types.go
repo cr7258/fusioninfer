@@ -22,7 +22,7 @@ import (
 )
 
 // RuntimeBackend selects the inference engine adapter of a runtime.
-// +kubebuilder:validation:Enum=vllm;sglang;trtllm
+// +kubebuilder:validation:Enum=vllm;sglang
 type RuntimeBackend string
 
 const (
@@ -31,9 +31,6 @@ const (
 
 	// RuntimeBackendSGLang runs SGLang.
 	RuntimeBackendSGLang RuntimeBackend = "sglang"
-
-	// RuntimeBackendTRTLLM runs TensorRT-LLM.
-	RuntimeBackendTRTLLM RuntimeBackend = "trtllm"
 )
 
 // LoRALoadingMode is when a runtime loads the LoRA adapters bound to it.

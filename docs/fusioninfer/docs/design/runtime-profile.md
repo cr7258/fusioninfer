@@ -43,13 +43,12 @@ spec:
 
 ```go
 // RuntimeBackend is the inference engine of the runtime.
-// +kubebuilder:validation:Enum=vllm;sglang;trtllm
+// +kubebuilder:validation:Enum=vllm;sglang
 type RuntimeBackend string
 
 const (
     RuntimeBackendVLLM   RuntimeBackend = "vllm"
     RuntimeBackendSGLang RuntimeBackend = "sglang"
-    RuntimeBackendTRTLLM RuntimeBackend = "trtllm"
 )
 
 // RuntimeProfileSpec declares a reusable inference runtime, and is shared by RuntimeProfile and ClusterRuntimeProfile.
@@ -138,7 +137,7 @@ flowchart TB
 
 ### Distributed Backend Execution {#distributed-backend-execution}
 
-`backend` is required, is one of `vllm`, `sglang` and `trtllm`, and applies to all roles of a RuntimeProfile. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers join it. The backend adapter injects only the startup parameters that differ between the Leader and the Workers, such as the address, rank and node count; a Profile cannot declare these parameters, and everything else, including TP/PP/DP, stays as the Profile declares it.
+`backend` is required, is either `vllm` or `sglang`, and applies to all roles of a RuntimeProfile. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers join it. The backend adapter injects only the startup parameters that differ between the Leader and the Workers, such as the address, rank and node count; a Profile cannot declare these parameters, and everything else, including TP/PP/DP, stays as the Profile declares it.
 
 #### vLLM {#backend-vllm}
 
@@ -147,10 +146,6 @@ The entrypoint is `vllm serve`, and the Profile declares the model path and engi
 #### SGLang {#backend-sglang}
 
 The entrypoint is `python3 -m sglang.launch_server`, and the Profile declares the model parameters, `--tp-size`, `--dp-size` and the GPU resources of each Pod. When `multinode` is set, the adapter uses SGLang's native distributed launch and injects `--dist-init-addr`, `--nnodes` and `--node-rank` into every Pod. Only rank 0 serves HTTP; the other ranks run the scheduler and the distributed compute processes. For the full Leader and Worker arguments, see [Workload Orchestration: SGLang](./workload-orchestration.md#sglang).
-
-#### TensorRT-LLM {#backend-trtllm}
-
-The design currently defines only single-node TensorRT-LLM. It does not yet define a multinode entrypoint or the parameters that the adapter injects, so until the adapter supports them, a Profile with `backend: trtllm` cannot set `multinode`.
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 
@@ -223,7 +218,7 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 
 ### Defaults and Validation {#defaults-and-validation}
 
-- `backend` is required and must be `vllm`, `sglang`, or `trtllm`.
+- `backend` is required and must be `vllm` or `sglang`.
 - `lora.loadingMode` must be `preload` or `dynamic`; `maxLoadedAdapters` must be at least 1.
 - A Profile can be consumed only when the current Operator version implements the selected LoRA mode for the specified backend and template entrypoint.
 - `aggregated` must be set, or both `prefiller` and `decoder` must be set.

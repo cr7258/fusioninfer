@@ -144,10 +144,6 @@ func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
 			withLoRA(aggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModePreload, 4)},
 		{"dynamic LoRA", "profile-lora-dynamic",
 			withLoRA(disaggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModeDynamic, 8)},
-		{"TensorRT-LLM", "profile-trtllm", fusioninferiov1alpha1.RuntimeProfileSpec{
-			Backend:    fusioninferiov1alpha1.RuntimeBackendTRTLLM,
-			Aggregated: engineRole("nvcr.io/nvidia/tensorrt-llm/release:1.0.0"),
-		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {

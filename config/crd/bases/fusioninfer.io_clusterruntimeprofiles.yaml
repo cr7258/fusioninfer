@@ -8635,7 +8635,6 @@ spec:
                 enum:
                 - vllm
                 - sglang
-                - trtllm
                 type: string
               decoder:
                 description: Decoder declares the decode role of Prefill/Decode disaggregation.
