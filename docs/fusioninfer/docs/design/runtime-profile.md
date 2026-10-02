@@ -146,7 +146,25 @@ The two backends start across nodes as follows:
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 
-`spec.lora` declares whether the Profile supports LoRA and how LoRAs are loaded. When it is omitted, the Profile does not accept LoRA bindings.
+`spec.lora` declares the LoRA configuration of the RuntimeProfile. The following example uses dynamic loading, and each InferenceDeployment can bind up to 8 LoRAs:
+
+```yaml
+spec:
+  backend: vllm
+  lora:
+    loadingMode: dynamic
+    maxLoadedAdapters: 8
+  aggregated:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            args:
+              - $(FUSION_MODEL_PATH)
+              - --enable-lora
+              - --max-loras
+              - "8"
+```
 
 - `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings produces a new workload revision.
 - `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.

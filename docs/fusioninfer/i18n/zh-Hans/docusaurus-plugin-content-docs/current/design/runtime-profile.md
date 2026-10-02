@@ -146,7 +146,25 @@ flowchart TB
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
-`spec.lora` 声明该 Profile 是否支持 LoRA，以及 LoRA 的加载方式。省略时，该 Profile 不接受 LoRA 绑定。
+`spec.lora` 声明 RuntimeProfile 的 LoRA 配置。下面的示例使用动态加载，每个 InferenceDeployment 最多绑定 8 个 LoRA：
+
+```yaml
+spec:
+  backend: vllm
+  lora:
+    loadingMode: dynamic
+    maxLoadedAdapters: 8
+  aggregated:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            args:
+              - $(FUSION_MODEL_PATH)
+              - --enable-lora
+              - --max-loras
+              - "8"
+```
 
 - `loadingMode: preload`：引擎启动时加载全部 LoRA，绑定变化会生成新的 workload revision。
 - `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
