@@ -150,7 +150,7 @@ During dynamic loading, Endpoint Picker publishes a `servedName` only after it i
 - Each value represents the number of logical replicas for the corresponding role, not the number of Pods.
 - When the RuntimeProfile configures `multinode.nodeCount` for a role, one logical replica expands into one Leader Pod and `nodeCount - 1` Worker Pods.
 
-Changing `replicas` only increases or decreases the number of independently routable logical replicas. It does not change the RuntimeProfile's fixed `multinode.nodeCount`, accelerator resources per Pod, or TP/PP/DP. `replicas` also does not equal the backend's data parallel size: the former creates independent workload groups and serving Endpoints, while the latter is an engine parallelism parameter within a single logical replica.
+Changing `replicas` only increases or decreases the number of independently routable logical replicas. It does not change the RuntimeProfile's fixed `multinode.nodeCount`, accelerator resources per Pod, or TP/PP/DP. `replicas` also does not equal the backend's data parallel size: the former creates independent workload groups and serving Endpoints, while the latter is an inference engine parallelism parameter within a single logical replica.
 
 The Deployment's role combination must exactly match the referenced RuntimeProfile. With an Aggregated Profile, only `replicas.aggregated` can be set; with a P/D Profile, both `replicas.prefiller` and `replicas.decoder` must be set.
 
@@ -161,7 +161,7 @@ The Deployment's role combination must exactly match the referenced RuntimeProfi
 - `lazy`: After a Pod is scheduled to a node, an injected init container checks the node cache. On a cache miss, it downloads and verifies the model; the inference engine starts only after this completes.
 - `eager`: Before creating new inference workloads, a warm-up Job runs on nodes that satisfy the role's scheduling constraints. New workloads are created only after all required copies have been materialized.
 
-This policy applies to both the Base Model and the artifacts referenced by `spec.lora`. `preload` mode requires the Base Model and all LoRAs to be readable before the engine starts. When a LoRA is added in `dynamic` mode, `eager` warms it on all target nodes first, while `lazy` uses a trusted materializer on the target nodes to materialize it on demand. In either cache mode, the backend loading interface is called only after materialization completes.
+This policy applies to both the Base Model and the artifacts referenced by `spec.lora`. `preload` mode requires the Base Model and all LoRAs to be readable before the inference engine starts. When a LoRA is added in `dynamic` mode, `eager` warms it on all target nodes first, while `lazy` uses a trusted materializer on the target nodes to materialize it on demand. In either cache mode, the backend loading interface is called only after materialization completes.
 
 For each role, `eager` calculates the warming requirement as logical replica count × effective node count. The effective node count comes from the role's `multinode.nodeCount` and defaults to 1 when unset; the Controller prepares one model cache copy on each distinct node that satisfies the Pod template's scheduling constraints.
 

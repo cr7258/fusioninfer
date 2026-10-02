@@ -16,7 +16,7 @@ InferenceDeployment uses `replicas.<role>` to control how many replicas run for 
 
 RuntimeProfile defines how each logical replica runs:
 
-- `podTemplate` defines the image, resources, and engine parameters for the Pods in the replica.
+- `podTemplate` defines the image, resources, and inference engine parameters for the Pods in the replica.
 - `multinode.nodeCount` defines how many Pods the replica contains.
   - When `multinode` is not set, `nodeCount` is treated as 1.
   - With `nodeCount: 4`, one replica contains one Leader and three Workers.
@@ -579,11 +579,11 @@ LWS_WORKER_INDEX     Index of the Worker in the current group
 LWS_GROUP_SIZE       Total number of Pods in the current group
 ```
 
-The backend adapter translates these values into engine-specific executor, address, rank, and node-count arguments. RuntimeProfile cannot declare adapter-managed executor, address, rank, `nnodes`, or headless arguments; if a conflict occurs, the Controller rejects workload generation.
+The backend adapter translates these values into the executor, address, rank, and node-count arguments of the corresponding inference engine. RuntimeProfile cannot declare adapter-managed executor, address, rank, `nnodes`, or headless arguments; if a conflict occurs, the Controller rejects workload generation.
 
 ### vLLM {#vllm}
 
-Multinode vLLM always uses the native multiprocessing executor. RuntimeProfile declares only the model and engine parameters such as TP/PP/DP; the backend adapter injects `--distributed-executor-backend mp` and the in-group startup arguments into each Pod.
+Multinode vLLM always uses the native multiprocessing executor. RuntimeProfile declares only the model and inference engine parameters such as TP/PP/DP; the backend adapter injects `--distributed-executor-backend mp` and the in-group startup arguments into each Pod.
 
 Every Pod runs `vllm serve`. The Leader uses:
 
@@ -624,7 +624,7 @@ python3 -m sglang.launch_server \
   --node-rank 0
 ```
 
-Each Worker uses the same engine parameters, with only the rank substituted:
+Each Worker uses the same inference engine parameters, with only the rank substituted:
 
 ```bash
 python3 -m sglang.launch_server \
@@ -688,7 +688,7 @@ The Controller sets each generated Pod's `schedulerName` to the Volcano schedule
 
 ## Scaling {#scaling}
 
-Changing only `replicas` in the InferenceDeployment does not change the node count, Pod resources, or engine parameters in the RuntimeProfile:
+Changing only `replicas` in the InferenceDeployment does not change the node count, Pod resources, or inference engine parameters in the RuntimeProfile:
 
 - Scaling Aggregated replicas updates `spec.replicas` on the standalone LWS.
 - Scaling P/D replicas updates `spec.replicas` on the corresponding DisaggregatedSet role, after which the DisaggregatedSet drives the child LWS.
@@ -709,7 +709,7 @@ With `loadingMode: preload`, the resolved LoRA references, digests, and `servedN
 The new revision is promoted only when all of the following conditions are met:
 
 - The required model copies have been materialized.
-- In preload mode, all LoRAs have been materialized and started successfully with the engine.
+- In preload mode, all LoRAs have been materialized and started successfully with the inference engine.
 - The Leader and all Workers in every logical replica are Ready.
 - All desired Aggregated or Prefill/Decode logical replicas are Ready.
 - The role Services have produced Ready Endpoints.

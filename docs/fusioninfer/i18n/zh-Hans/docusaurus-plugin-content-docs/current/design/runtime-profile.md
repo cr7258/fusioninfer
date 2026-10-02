@@ -109,7 +109,7 @@ type MultinodeSpec struct {
 | --- | --- | --- |
 | 逻辑副本 | 一个 Pod，运行在一个节点上 | N 个 Pod，分布在 N 个不同的 Kubernetes Node 上：1 个 Leader 和 N - 1 个 Worker |
 | Pod 模板 | `podTemplate` 就是这个 Pod | Leader 和 Worker 都由同一份 `podTemplate` 派生 |
-| 适用场景 | 单节点推理。单节点多 GPU 的引擎也属于这种情况，在一个 Pod 中申请多张 GPU | 需要跨多个节点运行的模型 |
+| 适用场景 | 单节点推理。单节点多 GPU 的推理引擎也属于这种情况，在一个 Pod 中申请多张 GPU | 需要跨多个节点运行的模型 |
 
 例如，`multinode.nodeCount: 4` 表示一个逻辑副本由 1 个 Leader Pod 和 3 个 Worker Pod 组成。如果对应的 `InferenceDeployment` 设置 `replicas.aggregated: 2`，Controller 会创建 2 个这样的逻辑副本，也就是 2 个 Leader Pod 和 6 个 Worker Pod，共 8 个 Pod。
 
@@ -149,8 +149,8 @@ flowchart TB
 `spec.lora` 声明 RuntimeProfile 的 LoRA 配置：
 
 - `loadingMode: preload`：推理引擎启动时加载全部 LoRA，绑定变化时会按新的 LoRA 列表重新部署工作负载。
-- `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
-- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
+- `loadingMode: dynamic`：在运行中的推理引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
+- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，推理引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
 
 下面的示例以 `dynamic` 方式加载 LoRA，每个 InferenceDeployment 最多绑定 8 个 LoRA：
 
@@ -184,7 +184,7 @@ Pod 模板是完整的 `corev1.PodTemplateSpec`，但只允许一层模板：
 - 同一份模板的 metadata、容器、资源和调度约束应用于 Leader 与 Worker，Controller 只按角色调整启动配置和保留环境变量。
 - `InferenceDeployment` 不提供第二层 Pod override。
 - 模板 `metadata` 只允许设置 labels 和 annotations；资源名称、Namespace、OwnerReference、finalizer 和其他服务端元数据由 Controller 管理。
-- 配置 `lora` 时，模板入口必须符合对应 backend 的 LoRA 契约。Profile 负责声明引擎的 LoRA enablement、rank 和 backend-specific 容量参数；Deployment 不能覆盖这些参数。
+- 配置 `lora` 时，模板入口必须符合对应 backend 的 LoRA 契约。Profile 负责声明推理引擎的 LoRA enablement、rank 和 backend-specific 容量参数；Deployment 不能覆盖这些参数。
 - 动态模式所需的管理端口、volume、mount 和环境变量由 Operator 注入，模板不能占用这些保留名称。只有 backend 原生接口不能满足内部 lifecycle 契约时才注入薄的无状态代理；该代理不持有期望状态，也不执行独立调和。
 
 Operator 在所有 `engine` 容器中提供统一的模型挂载契约：
@@ -209,7 +209,7 @@ FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
 
 Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存根目录。Profile 不能声明上述保留字段，也不能覆盖 Operator 管理的模型下载组件或 Endpoint Picker 镜像。
 
-声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。引擎容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
+声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。`engine` 容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
 
 生产环境中的推理镜像必须使用 OCI digest 固定。以下示例使用官方版本化镜像 `vllm/vllm-openai:v0.27.1` 以保持可读性，部署时需要替换为对应版本的 digest-pinned 镜像。
 

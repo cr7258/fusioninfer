@@ -16,7 +16,7 @@ InferenceDeployment 使用 `replicas.<role>` 控制每个角色运行多少个�
 
 RuntimeProfile 定义每个逻辑副本如何运行：
 
-- `podTemplate` 定义该副本中 Pod 的镜像、资源和引擎参数。
+- `podTemplate` 定义该副本中 Pod 的镜像、资源和推理引擎参数。
 - `multinode.nodeCount` 定义该副本包含多少个 Pod。
   - 未设置 `multinode` 时，`nodeCount` 按 1 处理。
   - 设置 `nodeCount: 4` 时，一个副本包含一个 Leader 和三个 Worker。
@@ -579,11 +579,11 @@ LWS_WORKER_INDEX     Worker 在当前 group 中的索引
 LWS_GROUP_SIZE       当前 group 的总 Pod 数
 ```
 
-backend adapter 把这些值转换为对应引擎的 executor、地址、rank 和节点数参数。RuntimeProfile 不能声明 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突时 Controller 拒绝生成工作负载。
+backend adapter 把这些值转换为对应推理引擎的 executor、地址、rank 和节点数参数。RuntimeProfile 不能声明 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突时 Controller 拒绝生成工作负载。
 
 ### vLLM {#vllm}
 
-多节点 vLLM 固定使用原生 multiprocessing executor。RuntimeProfile 只声明模型和 TP/PP/DP 等引擎参数；backend adapter 为每个 Pod 注入 `--distributed-executor-backend mp` 及组内启动参数。
+多节点 vLLM 固定使用原生 multiprocessing executor。RuntimeProfile 只声明模型和 TP/PP/DP 等推理引擎参数；backend adapter 为每个 Pod 注入 `--distributed-executor-backend mp` 及组内启动参数。
 
 每个 Pod 都运行 `vllm serve`。Leader 使用：
 
@@ -624,7 +624,7 @@ python3 -m sglang.launch_server \
   --node-rank 0
 ```
 
-Worker 使用相同的引擎参数，只替换 rank：
+Worker 使用相同的推理引擎参数，只替换 rank：
 
 ```bash
 python3 -m sglang.launch_server \
@@ -688,7 +688,7 @@ Controller 把生成的 Pod `schedulerName` 设置为 Operator 配置的 Volcano
 
 ## 扩缩容 {#scaling}
 
-只修改 InferenceDeployment 的 `replicas` 不改变 RuntimeProfile 中的节点数、Pod 资源或引擎参数：
+只修改 InferenceDeployment 的 `replicas` 不改变 RuntimeProfile 中的节点数、Pod 资源或推理引擎参数：
 
 - Aggregated 扩缩容更新 standalone LWS 的 `spec.replicas`。
 - P/D 扩缩容更新 DisaggregatedSet 对应 role 的 `spec.replicas`，DisaggregatedSet 再驱动 child LWS。
@@ -709,7 +709,7 @@ Model、RuntimeProfile 或缓存模式变化会产生新的 template hash。Cont
 只有以下条件同时满足时才提升新 revision：
 
 - 所需的模型缓存副本已经就绪。
-- 预加载模式下，全部 LoRA 已完成下载和缓存，并随引擎启动成功。
+- 预加载模式下，全部 LoRA 已完成下载和缓存，并随推理引擎启动成功。
 - 每个逻辑副本的 Leader 和全部 Worker 都 Ready。
 - Aggregated 或 Prefill/Decode 的全部期望逻辑副本 Ready。
 - 角色 Service 已产生 Ready Endpoint。

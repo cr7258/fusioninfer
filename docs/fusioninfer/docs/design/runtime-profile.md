@@ -109,7 +109,7 @@ Each role uses the same `RuntimeComponentSpec`, and `multinode` decides how many
 | --- | --- | --- |
 | Logical replica | One Pod on one node | N Pods on N different Kubernetes Nodes: one Leader and N - 1 Workers |
 | Pod template | `podTemplate` is the Pod | The Leader and the Workers are all derived from the same `podTemplate` |
-| Use | Single-node inference, including a multi-GPU engine that requests several GPUs in one Pod | Models that must run across several nodes |
+| Use | Single-node inference, including a multi-GPU inference engine that requests several GPUs in one Pod | Models that must run across several nodes |
 
 For example, `multinode.nodeCount: 4` means that one logical replica consists of one Leader Pod and three Worker Pods. If the corresponding `InferenceDeployment` sets `replicas.aggregated: 2`, the Controller creates two such logical replicas: two Leader Pods and six Worker Pods, for a total of eight Pods.
 
@@ -149,8 +149,8 @@ The two backends start across nodes as follows:
 `spec.lora` declares the LoRA configuration of the RuntimeProfile:
 
 - `loadingMode: preload` loads all LoRAs when the inference engine starts; a change to the bindings redeploys the workload with the new LoRA list.
-- `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.
-- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
+- `loadingMode: dynamic` loads and unloads LoRAs in the running inference engine; a change to the bindings does not restart the Base Model.
+- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the inference engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
 
 The following example loads LoRAs in `dynamic` mode, and each InferenceDeployment can bind up to 8 LoRAs:
 
@@ -184,7 +184,7 @@ The PodTemplate is a complete `corev1.PodTemplateSpec`, but only one template la
 - The metadata, containers, resources, and scheduling constraints from the same template apply to the Leader and Workers; the Controller adjusts only the startup configuration and reserved environment variables per role.
 - `InferenceDeployment` does not provide a second layer of Pod overrides.
 - Template `metadata` may contain only labels and annotations. Resource names, Namespace, OwnerReference, finalizers, and other server-side metadata are managed by the Controller.
-- When `lora` is configured, the template entrypoint must conform to the LoRA contract for the corresponding backend. The Profile declares the engine's LoRA enablement, rank, and backend-specific capacity parameters; the Deployment cannot override them.
+- When `lora` is configured, the template entrypoint must conform to the LoRA contract for the corresponding backend. The Profile declares the inference engine's LoRA enablement, rank, and backend-specific capacity parameters; the Deployment cannot override them.
 - The Operator injects the management port, volume, mount, and environment variables required by dynamic mode, and the template cannot use these reserved names. A thin stateless proxy is injected only when the backend's native interface cannot satisfy the internal lifecycle contract; the proxy does not own desired state or perform independent reconciliation.
 
 The Operator provides a uniform Model mount contract in every `engine` container:
@@ -209,7 +209,7 @@ FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
 
 Runtime commands should read the Model through `$(FUSION_MODEL_PATH)` rather than hard-coding the cache root. A Profile cannot declare the reserved fields above or override the materializer or Endpoint Picker images managed by the Operator.
 
-When LoRA bindings are declared, the Operator also mounts the current Deployment's adapter projection read-only at `/adapters` and generates `/var/run/fusioninfer/lora/adapters.json`. The Manifest uses an internal binding key to map `servedName`, the resolved Model UID, the digest, and the in-container path; paths do not directly use the user-provided served name. The engine container can see only the LoRAs bound to the current Deployment and cannot browse the node cache root.
+When LoRA bindings are declared, the Operator also mounts the current Deployment's adapter projection read-only at `/adapters` and generates `/var/run/fusioninfer/lora/adapters.json`. The Manifest uses an internal binding key to map `servedName`, the resolved Model UID, the digest, and the in-container path; paths do not directly use the user-provided served name. The `engine` container can see only the LoRAs bound to the current Deployment and cannot browse the node cache root.
 
 Inference images in production must be pinned by OCI digest. For readability, the following examples use the official versioned image `vllm/vllm-openai:v0.27.1`; replace it with the corresponding digest-pinned image when deploying.
 

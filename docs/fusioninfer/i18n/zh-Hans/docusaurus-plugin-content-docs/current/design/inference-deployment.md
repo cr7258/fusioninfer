@@ -150,7 +150,7 @@ P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻�
 - 每个值表示对应角色的逻辑副本数，而不是 Pod 数量。
 - RuntimeProfile 为角色配置 `multinode.nodeCount` 时，一个逻辑副本会展开为一个 Leader Pod 和 `nodeCount - 1` 个 Worker Pod。
 
-修改 `replicas` 只会增加或减少可独立路由的逻辑副本，不会改变 RuntimeProfile 固定的 `multinode.nodeCount`、每个 Pod 的加速器资源或 TP/PP/DP。`replicas` 也不等于 backend 的 data parallel size：前者创建独立的工作负载组和服务 Endpoint，后者是单个逻辑副本内部的引擎并行参数。
+修改 `replicas` 只会增加或减少可独立路由的逻辑副本，不会改变 RuntimeProfile 固定的 `multinode.nodeCount`、每个 Pod 的加速器资源或 TP/PP/DP。`replicas` 也不等于 backend 的 data parallel size：前者创建独立的工作负载组和服务 Endpoint，后者是单个逻辑副本内部的推理引擎并行参数。
 
 Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引用 Aggregated Profile 时只能设置 `replicas.aggregated`；引用 P/D Profile 时必须同时设置 `replicas.prefiller` 和 `replicas.decoder`。
 
@@ -161,7 +161,7 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 - `lazy`：Pod 调度到节点后，由注入的 init container 检查节点缓存。缓存缺失时下载并校验模型，完成后才启动推理引擎。
 - `eager`：创建新推理工作负载前，先在满足角色调度约束的节点上运行预热 Job。所需的缓存副本全部就绪后才创建新工作负载。
 
-该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上受信任的下载组件按需下载和缓存；无论哪种缓存模式，都在下载和缓存完成后才调用 backend 加载接口。
+该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在推理引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上受信任的下载组件按需下载和缓存；无论哪种缓存模式，都在下载和缓存完成后才调用 backend 加载接口。
 
 `eager` 为每个角色按“逻辑副本数 × 有效节点数”计算预热需求。有效节点数来自该角色的 `multinode.nodeCount`，未设置时为 1；Controller 在满足 Pod 模板调度约束的 distinct nodes 上各准备一份模型缓存。
 
