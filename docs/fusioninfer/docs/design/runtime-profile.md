@@ -114,6 +114,28 @@ Each role uses the same `RuntimeComponentSpec`, and `multinode` decides how many
 
 For example, `multinode.nodeCount: 4` means that one logical replica consists of one Leader Pod and three Worker Pods. If the corresponding `InferenceDeployment` sets `replicas.aggregated: 2`, the Controller creates two such logical replicas: two Leader Pods and six Worker Pods, for a total of eight Pods.
 
+```mermaid
+flowchart TB
+    Profile["RuntimeProfile<br/>multinode.nodeCount: 4"]
+    Deployment["InferenceDeployment<br/>replicas.aggregated: 2"]
+    Controller["Controller"]
+
+    Profile --> Controller
+    Deployment --> Controller
+    Controller --> Replica0
+    Controller --> Replica1
+
+    subgraph Replica0["Logical replica 0"]
+        direction LR
+        Leader0["Leader"] ~~~ Worker01["Worker"] ~~~ Worker02["Worker"] ~~~ Worker03["Worker"]
+    end
+
+    subgraph Replica1["Logical replica 1"]
+        direction LR
+        Leader1["Leader"] ~~~ Worker11["Worker"] ~~~ Worker12["Worker"] ~~~ Worker13["Worker"]
+    end
+```
+
 ### Distributed Backend Execution {#distributed-backend-execution}
 
 `backend` is required and supports `vllm`, `sglang`, and `trtllm`. It selects only the engine adapter; the role field combination still determines whether the mode is Aggregated or P/D. All roles in the same RuntimeProfile use the same backend.

@@ -114,6 +114,28 @@ type MultinodeSpec struct {
 
 例如，`multinode.nodeCount: 4` 表示一个逻辑副本由 1 个 Leader Pod 和 3 个 Worker Pod 组成。如果对应的 `InferenceDeployment` 设置 `replicas.aggregated: 2`，Controller 会创建 2 个这样的逻辑副本，也就是 2 个 Leader Pod 和 6 个 Worker Pod，共 8 个 Pod。
 
+```mermaid
+flowchart TB
+    Profile["RuntimeProfile<br/>multinode.nodeCount: 4"]
+    Deployment["InferenceDeployment<br/>replicas.aggregated: 2"]
+    Controller["Controller"]
+
+    Profile --> Controller
+    Deployment --> Controller
+    Controller --> Replica0
+    Controller --> Replica1
+
+    subgraph Replica0["逻辑副本 0"]
+        direction LR
+        Leader0["Leader"] ~~~ Worker01["Worker"] ~~~ Worker02["Worker"] ~~~ Worker03["Worker"]
+    end
+
+    subgraph Replica1["逻辑副本 1"]
+        direction LR
+        Leader1["Leader"] ~~~ Worker11["Worker"] ~~~ Worker12["Worker"] ~~~ Worker13["Worker"]
+    end
+```
+
 ### Backend 分布式运行 {#distributed-backend-execution}
 
 `backend` 必填，支持 `vllm`、`sglang` 和 `trtllm`。它只选择引擎适配器；Aggregated 或 P/D 模式仍由角色字段组合决定。同一 RuntimeProfile 中的所有角色使用相同 backend。
