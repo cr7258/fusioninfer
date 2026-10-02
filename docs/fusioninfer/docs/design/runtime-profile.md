@@ -137,7 +137,7 @@ flowchart TB
 
 ### Distributed Backend Execution {#distributed-backend-execution}
 
-Two backends are currently supported, `vllm` and `sglang`, and all roles of a RuntimeProfile use the same one. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers join it. The backend adapter injects only the startup parameters that differ between the Leader and the Workers, such as the address, rank and node count; a Profile cannot declare these parameters, and everything else, including TP/PP/DP, stays as the Profile declares it.
+Two backends are currently supported, `vllm` and `sglang`, and all roles of a RuntimeProfile use the same one. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`, and the backend adapter adds their distributed startup parameters.
 
 The two backends start across nodes as follows:
 
