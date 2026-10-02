@@ -94,19 +94,23 @@ type MultinodeSpec struct {
 
 ### Inference Modes and Roles {#role-fields}
 
-The valid role field combinations are:
+The combination of role fields selects the inference mode:
 
-- Setting only `aggregated` selects Aggregated inference.
-- Setting both `prefiller` and `decoder` selects Prefill/Decode disaggregation.
-- `aggregated` cannot coexist with `prefiller` or `decoder`.
-- `prefiller` and `decoder` must appear together.
+| Role fields | Result |
+| --- | --- |
+| Only `aggregated` | Aggregated inference |
+| Both `prefiller` and `decoder` | Prefill/Decode disaggregation |
+| `aggregated` with `prefiller` or `decoder` | Invalid |
+| Only one of `prefiller` and `decoder` | Invalid |
+| None of the three | Invalid |
 
-Each role uses the same `RuntimeComponentSpec`:
+Each role uses the same `RuntimeComponentSpec`, and `multinode` decides how many Pods make up a logical replica:
 
-- When `multinode` is not set, `podTemplate` represents one complete single-node logical replica.
-- When `multinode` is set, `nodeCount` specifies the total number of nodes used by each logical replica, including one Leader and `nodeCount - 1` Workers.
-- The Leader and Workers are all derived from the same `podTemplate` and must be placed on different Kubernetes Nodes.
-- A single-node, multi-GPU engine should not set `multinode`; it should request multiple GPUs in one Pod instead.
+|  | Without `multinode` | With `multinode.nodeCount: N` |
+| --- | --- | --- |
+| Logical replica | One Pod on one node | N Pods on N different Kubernetes Nodes: one Leader and N - 1 Workers |
+| Pod template | `podTemplate` is the Pod | The Leader and the Workers are all derived from the same `podTemplate` |
+| Use | Single-node inference, including a multi-GPU engine that requests several GPUs in one Pod | Models that must run across several nodes |
 
 For example, `multinode.nodeCount: 4` means that one logical replica consists of one Leader Pod and three Worker Pods. If the corresponding `InferenceDeployment` sets `replicas.aggregated: 2`, the Controller creates two such logical replicas: two Leader Pods and six Worker Pods, for a total of eight Pods.
 

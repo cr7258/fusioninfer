@@ -94,19 +94,23 @@ type MultinodeSpec struct {
 
 ### 推理模式与角色 {#role-fields}
 
-合法的角色字段组合如下：
+角色字段的组合决定推理模式：
 
-- 只设置 `aggregated` 表示聚合推理。
-- 同时设置 `prefiller` 和 `decoder` 表示 Prefill/Decode 分离。
-- `aggregated` 不能与 `prefiller` 或 `decoder` 共存。
-- `prefiller` 和 `decoder` 必须同时出现。
+| 角色字段 | 结果 |
+| --- | --- |
+| 只设置 `aggregated` | 聚合推理 |
+| 同时设置 `prefiller` 和 `decoder` | Prefill/Decode 分离 |
+| `aggregated` 与 `prefiller` 或 `decoder` 同时设置 | 不合法 |
+| 只设置 `prefiller` 和 `decoder` 中的一个 | 不合法 |
+| 三个都不设置 | 不合法 |
 
-每个角色使用相同的 `RuntimeComponentSpec`：
+每个角色使用相同的 `RuntimeComponentSpec`，由 `multinode` 决定一个逻辑副本由几个 Pod 组成：
 
-- 未设置 `multinode` 时，`podTemplate` 表示一个完整的单节点逻辑副本。
-- 设置 `multinode` 时，`nodeCount` 表示每个逻辑副本使用的总节点数，其中包含一个 Leader 和 `nodeCount - 1` 个 Worker。
-- Leader 和 Worker 都由同一份 `podTemplate` 派生，并且必须分布在不同 Kubernetes Node。
-- 单节点多 GPU 引擎不应设置 `multinode`，而应在一个 Pod 中申请多张 GPU。
+|  | 未设置 `multinode` | 设置 `multinode.nodeCount: N` |
+| --- | --- | --- |
+| 逻辑副本 | 一个 Pod，运行在一个节点上 | N 个 Pod，分布在 N 个不同的 Kubernetes Node 上：1 个 Leader 和 N - 1 个 Worker |
+| Pod 模板 | `podTemplate` 就是这个 Pod | Leader 和 Worker 都由同一份 `podTemplate` 派生 |
+| 适用场景 | 单节点推理。单节点多 GPU 的引擎也属于这种情况，在一个 Pod 中申请多张 GPU | 需要跨多个节点运行的模型 |
 
 例如，`multinode.nodeCount: 4` 表示一个逻辑副本由 1 个 Leader Pod 和 3 个 Worker Pod 组成。如果对应的 `InferenceDeployment` 设置 `replicas.aggregated: 2`，Controller 会创建 2 个这样的逻辑副本，也就是 2 个 Leader Pod 和 6 个 Worker Pod，共 8 个 Pod。
 
