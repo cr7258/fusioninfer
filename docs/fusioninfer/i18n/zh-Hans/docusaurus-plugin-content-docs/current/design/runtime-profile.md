@@ -148,7 +148,7 @@ flowchart TB
 
 `spec.lora` 声明 RuntimeProfile 的 LoRA 配置：
 
-- `loadingMode: preload`：引擎启动时加载全部 LoRA，绑定变化时会按新的 LoRA 列表重新部署工作负载。
+- `loadingMode: preload`：推理引擎启动时加载全部 LoRA，绑定变化时会按新的 LoRA 列表重新部署工作负载。
 - `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
 - `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
 
