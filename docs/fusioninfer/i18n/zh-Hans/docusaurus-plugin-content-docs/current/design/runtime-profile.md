@@ -92,7 +92,7 @@ type MultinodeSpec struct {
 }
 ```
 
-### 角色字段 {#role-fields}
+### 推理模式与角色 {#role-fields}
 
 合法的角色字段组合如下：
 

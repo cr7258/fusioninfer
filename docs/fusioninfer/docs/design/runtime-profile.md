@@ -92,7 +92,7 @@ type MultinodeSpec struct {
 }
 ```
 
-### Role Fields {#role-fields}
+### Inference Modes and Roles {#role-fields}
 
 The valid role field combinations are:
 
