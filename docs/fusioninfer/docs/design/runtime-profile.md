@@ -148,7 +148,7 @@ The two backends start across nodes as follows:
 
 `spec.lora` declares the LoRA configuration of the RuntimeProfile:
 
-- `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings produces a new workload revision.
+- `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings redeploys the workload with the new LoRA list.
 - `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.
 - `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
 
