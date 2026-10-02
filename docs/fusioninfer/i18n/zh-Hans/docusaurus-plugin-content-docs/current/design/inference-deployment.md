@@ -7,7 +7,7 @@ description: 绑定 Model 与 RuntimeProfile，并声明副本数、缓存、路
 
 `InferenceDeployment` 是 Namespaced 资源，用于创建一个可访问的模型推理服务。它通过显式引用绑定 Base Model、可选的多个 LoRA 和 RuntimeProfile，并声明部署副本数、模型的下载与缓存时机，以及 Gateway API 入口。
 
-下面是一个最小的 Aggregated 结构示例。省略 `spec.cache` 时使用默认的 `lazy` 模式。
+下面是一个 `InferenceDeployment` 资源的示例。省略 `spec.cache` 时使用默认的 `lazy` 模式。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

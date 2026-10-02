@@ -10,7 +10,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
 
-两个 Kind 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。下面是一个最小的 Aggregated 结构示例：
+两个 Kind 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。下面是一个 `RuntimeProfile` 资源的示例：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

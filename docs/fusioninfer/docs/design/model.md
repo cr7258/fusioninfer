@@ -14,7 +14,7 @@ Both Kinds use the same `ModelSpec`. Setting only `spec.source` represents a Bas
 
 The model agent that FusionInfer runs on each node downloads model files into the node cache. See [Prefetch](#prefetch) for when downloads happen.
 
-The following example is a minimal Namespaced Base Model:
+The following is an example of a `Model` resource:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

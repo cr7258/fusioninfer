@@ -14,7 +14,7 @@ description: 定义命名空间级或集群级的模型制品，以及可选的 
 
 模型文件由 FusionInfer 在每个节点上运行的 model agent 下载到节点缓存，下载时机见[预先下载](#prefetch)。
 
-下面是一个最小的 Namespaced Base Model：
+下面是一个 `Model` 资源的示例：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

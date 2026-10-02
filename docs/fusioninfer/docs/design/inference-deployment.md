@@ -7,7 +7,7 @@ description: Bind a Model to a RuntimeProfile and declare replicas, caching, rou
 
 `InferenceDeployment` is a Namespaced resource that creates an accessible model inference service. It binds a Base Model, optional LoRAs, and a RuntimeProfile through explicit references, and declares the deployment replica counts, model materialization timing, and Gateway API entry point.
 
-The following example shows a minimal Aggregated topology. Omitting `spec.cache` uses the default `lazy` mode.
+The following is an example of an `InferenceDeployment` resource. Omitting `spec.cache` uses the default `lazy` mode.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

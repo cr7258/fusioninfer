@@ -10,7 +10,7 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 - `RuntimeProfile` is a namespaced resource that can be reused within a Namespace.
 - `ClusterRuntimeProfile` is a cluster-scoped resource that can be shared across Namespaces.
 
-Both Kinds use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model. The following example shows a minimal Aggregated structure:
+Both Kinds use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model. The following is an example of a `RuntimeProfile` resource:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
