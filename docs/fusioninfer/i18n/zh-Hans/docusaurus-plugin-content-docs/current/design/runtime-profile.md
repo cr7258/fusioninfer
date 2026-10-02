@@ -138,7 +138,7 @@ flowchart TB
 
 ### Backend 分布式运行 {#distributed-backend-execution}
 
-`backend` 必填，可选 `vllm`、`sglang` 和 `trtllm`，只决定使用哪个引擎适配器，Controller 不会根据镜像名或命令去猜测；同一个 RuntimeProfile 的所有角色使用相同的 backend。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker：Leader 建立分布式运行环境并对外提供推理服务，Worker 只加入这个环境。backend adapter 只改写 `engine` 容器的启动参数，注入地址、rank、节点数等随 Leader 和 Worker 变化的参数，Profile 不能预先声明这些参数；镜像、TP/PP/DP、资源、环境变量、volume 和调度约束都沿用 Profile 中的写法，TP/PP/DP 是否与模型匹配由 Profile 作者负责。adapter 只支持随 Operator 版本记录并测试过的启动入口，遇到无法识别的入口或冲突的参数时，Controller 拒绝创建新的工作负载。
+`backend` 必填，可选 `vllm`、`sglang` 和 `trtllm`，同一个 RuntimeProfile 的所有角色使用相同的 backend。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker：Leader 建立分布式运行环境并对外提供推理服务，Worker 只加入这个环境。backend adapter 只改写 `engine` 容器的启动参数，注入地址、rank、节点数等随 Leader 和 Worker 变化的参数，Profile 不能预先声明这些参数；镜像、TP/PP/DP、资源、环境变量、volume 和调度约束都沿用 Profile 中的写法，TP/PP/DP 是否与模型匹配由 Profile 作者负责。adapter 只支持随 Operator 版本记录并测试过的启动入口，遇到无法识别的入口或冲突的参数时，Controller 拒绝创建新的工作负载。
 
 #### vLLM {#backend-vllm}
 
