@@ -81,11 +81,8 @@ type RuntimeLoRASpec struct {
 
 // RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
 type RuntimeComponentSpec struct {
-    // 解码并校验为 corev1.PodTemplateSpec。
-    // +kubebuilder:pruning:PreserveUnknownFields
-    PodTemplate runtime.RawExtension `json:"podTemplate"`
-
-    Multinode *MultinodeSpec `json:"multinode,omitempty"`
+    PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
+    Multinode   *MultinodeSpec         `json:"multinode,omitempty"`
 }
 
 // MultinodeSpec 声明跨多个节点的逻辑副本，包含一个 Leader 和 nodeCount - 1 个 Worker。
@@ -95,7 +92,7 @@ type MultinodeSpec struct {
 }
 ```
 
-`podTemplate` 使用 `runtime.RawExtension`，避免在 CRD 中重复展开完整 Kubernetes Pod schema。Admission 和 Controller 必须将其严格解码为当前支持的 `corev1.PodTemplateSpec`。
+`podTemplate` 是完整的 `corev1.PodTemplateSpec`。CRD 中嵌入了 Pod 的 schema，创建或更新 Profile 时，API server 会校验模板的字段和类型。嵌入 Pod schema 后，两个 CRD 各约 1.8 MB，超出了客户端 `kubectl apply` 在 last-applied 注解中能保存的大小，需要使用 server-side apply 安装，例如 `kubectl apply --server-side`。
 
 ### 角色字段 {#role-fields}
 
@@ -210,7 +207,7 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - 必须设置 `aggregated`，或者同时设置 `prefiller` 和 `decoder`。
 - 每个已声明角色都必须提供 `podTemplate`。
 - 设置 `multinode` 时，`nodeCount` 必须大于等于 2；省略时按单节点处理。
-- RawExtension 必须能够严格解码为 `corev1.PodTemplateSpec`。
+- `podTemplate` 必须是合法的 `corev1.PodTemplateSpec`，由 API server 按 Pod schema 校验。
 - 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
 - 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
 - backend adapter 必须支持模板中声明的镜像和入口参数。

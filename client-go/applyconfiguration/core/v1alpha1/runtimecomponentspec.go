@@ -18,7 +18,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	v1 "k8s.io/client-go/applyconfigurations/core/v1"
 )
 
 // RuntimeComponentSpecApplyConfiguration represents a declarative configuration of the RuntimeComponentSpec type for use
@@ -27,9 +27,8 @@ import (
 // RuntimeComponentSpec declares one role of a runtime: the Pod template of a logical replica and,
 // when the replica spans several nodes, the node count.
 type RuntimeComponentSpecApplyConfiguration struct {
-	// PodTemplate is the corev1.PodTemplateSpec of the role. The CRD keeps it schemaless to avoid
-	// embedding the full Pod schema, so consumers decode and validate it strictly.
-	PodTemplate *runtime.RawExtension `json:"podTemplate,omitempty"`
+	// PodTemplate is the Pod template of the role.
+	PodTemplate *v1.PodTemplateSpecApplyConfiguration `json:"podTemplate,omitempty"`
 	// Multinode spreads each logical replica over several nodes: a leader and nodeCount - 1 workers,
 	// all created from podTemplate. When omitted, each logical replica is a single Pod.
 	Multinode *MultinodeSpecApplyConfiguration `json:"multinode,omitempty"`
@@ -44,8 +43,8 @@ func RuntimeComponentSpec() *RuntimeComponentSpecApplyConfiguration {
 // WithPodTemplate sets the PodTemplate field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PodTemplate field is set to the value of the last call.
-func (b *RuntimeComponentSpecApplyConfiguration) WithPodTemplate(value runtime.RawExtension) *RuntimeComponentSpecApplyConfiguration {
-	b.PodTemplate = &value
+func (b *RuntimeComponentSpecApplyConfiguration) WithPodTemplate(value *v1.PodTemplateSpecApplyConfiguration) *RuntimeComponentSpecApplyConfiguration {
+	b.PodTemplate = value
 	return b
 }
 

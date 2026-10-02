@@ -81,11 +81,8 @@ type RuntimeLoRASpec struct {
 
 // RuntimeComponentSpec declares one role: the Pod template of a logical replica and whether the replica spans several nodes.
 type RuntimeComponentSpec struct {
-    // Decoded and validated as corev1.PodTemplateSpec.
-    // +kubebuilder:pruning:PreserveUnknownFields
-    PodTemplate runtime.RawExtension `json:"podTemplate"`
-
-    Multinode *MultinodeSpec `json:"multinode,omitempty"`
+    PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
+    Multinode   *MultinodeSpec         `json:"multinode,omitempty"`
 }
 
 // MultinodeSpec declares a logical replica that spans several nodes: one Leader and nodeCount - 1 Workers.
@@ -95,7 +92,7 @@ type MultinodeSpec struct {
 }
 ```
 
-`podTemplate` uses `runtime.RawExtension` to avoid expanding the complete Kubernetes Pod schema again in the CRD. Admission and Controller must strictly decode it as the currently supported `corev1.PodTemplateSpec`.
+`podTemplate` is a complete `corev1.PodTemplateSpec`. The CRD embeds the Pod schema, so the API server validates the fields and types of the template when a Profile is created or updated. The embedded schema makes each of the two CRDs about 1.8 MB, more than client-side `kubectl apply` can store in its last-applied annotation, so install them with server-side apply, for example `kubectl apply --server-side`.
 
 ### Role Fields {#role-fields}
 
@@ -210,7 +207,7 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 - `aggregated` must be set, or both `prefiller` and `decoder` must be set.
 - Every declared role must provide a `podTemplate`.
 - When `multinode` is set, `nodeCount` must be at least 2; when it is omitted, the role is treated as single-node.
-- RawExtension must strictly decode as `corev1.PodTemplateSpec`.
+- `podTemplate` must be a valid `corev1.PodTemplateSpec`; the API server validates it against the Pod schema.
 - The template must contain an `engine` container and exactly one named `http` port.
 - The template cannot use Operator-reserved volumes, init containers, environment variables, mount paths, labels, or annotations.
 - The backend adapter must support the image and entrypoint arguments declared in the template.

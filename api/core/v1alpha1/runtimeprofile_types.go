@@ -17,8 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // RuntimeBackend selects the inference engine adapter of a runtime.
@@ -96,11 +96,9 @@ type RuntimeLoRASpec struct {
 // RuntimeComponentSpec declares one role of a runtime: the Pod template of a logical replica and,
 // when the replica spans several nodes, the node count.
 type RuntimeComponentSpec struct {
-	// PodTemplate is the corev1.PodTemplateSpec of the role. The CRD keeps it schemaless to avoid
-	// embedding the full Pod schema, so consumers decode and validate it strictly.
-	// +kubebuilder:pruning:PreserveUnknownFields
+	// PodTemplate is the Pod template of the role.
 	// +required
-	PodTemplate runtime.RawExtension `json:"podTemplate"`
+	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
 
 	// Multinode spreads each logical replica over several nodes: a leader and nodeCount - 1 workers,
 	// all created from podTemplate. When omitted, each logical replica is a single Pod.

@@ -17,14 +17,13 @@ limitations under the License.
 package cel
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
@@ -75,20 +74,18 @@ func profileSpecOf(object client.Object) *fusioninferiov1alpha1.RuntimeProfileSp
 
 // engineRole returns a role whose Pod template runs image in an engine container with an http port.
 func engineRole(image string) *fusioninferiov1alpha1.RuntimeComponentSpec {
-	template, err := json.Marshal(corev1.PodTemplateSpec{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{
-				Name:  "engine",
-				Image: image,
-				Args:  []string{"$(FUSION_MODEL_PATH)"},
-				Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8000}},
-			}},
+	return &fusioninferiov1alpha1.RuntimeComponentSpec{
+		PodTemplate: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name:  "engine",
+					Image: image,
+					Args:  []string{"$(FUSION_MODEL_PATH)"},
+					Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8000}},
+				}},
+			},
 		},
-	})
-	if err != nil {
-		panic(err)
 	}
-	return &fusioninferiov1alpha1.RuntimeComponentSpec{PodTemplate: runtime.RawExtension{Raw: template}}
 }
 
 // multinodeRole returns an engine role whose logical replica spans nodeCount nodes.
@@ -193,6 +190,32 @@ func TestRuntimeProfileRejectsInvalidRoles(t *testing.T) {
 			object := runtimeProfileObject("RuntimeProfile", tt.name, tt.spec)
 			expectInvalid(t, k8sClient.Create(t.Context(), object), tt.message)
 		})
+	}
+}
+
+// TestRuntimeProfileKeepsPodTemplateMetadata checks that the labels and annotations of a Pod
+// template survive pruning, which needs the CRD to be generated with generateEmbeddedObjectMeta.
+func TestRuntimeProfileKeepsPodTemplateMetadata(t *testing.T) {
+	t.Parallel()
+	metadata := metav1.ObjectMeta{
+		Labels:      map[string]string{"example.fusioninfer.io/runtime": "vllm"},
+		Annotations: map[string]string{"example.fusioninfer.io/owner": "team-a"},
+	}
+	spec := aggregatedSpec()
+	spec.Aggregated.PodTemplate.ObjectMeta = metadata
+	object := runtimeProfileObject("RuntimeProfile", "template-metadata", spec)
+	createObject(t, object)
+
+	stored := &fusioninferiov1alpha1.RuntimeProfile{}
+	if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(object), stored); err != nil {
+		t.Fatalf("get RuntimeProfile: %v", err)
+	}
+	got := stored.Spec.Aggregated.PodTemplate.ObjectMeta
+	if diff := cmp.Diff(metadata.Labels, got.Labels); diff != "" {
+		t.Errorf("template labels mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(metadata.Annotations, got.Annotations); diff != "" {
+		t.Errorf("template annotations mismatch (-want +got):\n%s", diff)
 	}
 }
 
