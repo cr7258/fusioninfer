@@ -139,13 +139,10 @@ flowchart TB
 
 `backend` is required, is either `vllm` or `sglang`, and applies to all roles of a RuntimeProfile. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers join it. The backend adapter injects only the startup parameters that differ between the Leader and the Workers, such as the address, rank and node count; a Profile cannot declare these parameters, and everything else, including TP/PP/DP, stays as the Profile declares it.
 
-#### vLLM {#backend-vllm}
+The two backends start across nodes as follows:
 
-The entrypoint is `vllm serve`, and the Profile declares the model path and engine parameters such as TP/PP/DP. When `multinode` is set, the adapter always uses vLLM's native multiprocessing executor and injects `--distributed-executor-backend mp`, `--nnodes`, `--master-addr`, `--master-port` and `--node-rank` into every Pod, plus `--headless` for the Workers. Only the Leader serves HTTP; the Workers only take part in distributed execution. For the full Leader and Worker arguments, see [Workload Orchestration: vLLM](./workload-orchestration.md#vllm).
-
-#### SGLang {#backend-sglang}
-
-The entrypoint is `python3 -m sglang.launch_server`, and the Profile declares the model parameters, `--tp-size`, `--dp-size` and the GPU resources of each Pod. When `multinode` is set, the adapter uses SGLang's native distributed launch and injects `--dist-init-addr`, `--nnodes` and `--node-rank` into every Pod. Only rank 0 serves HTTP; the other ranks run the scheduler and the distributed compute processes. For the full Leader and Worker arguments, see [Workload Orchestration: SGLang](./workload-orchestration.md#sglang).
+- vLLM uses its native multiprocessing executor, and the Workers join the Leader in headless mode. See [Workload Orchestration: vLLM](./workload-orchestration.md#vllm) for the arguments.
+- SGLang uses its native distributed launch, and only rank 0 serves HTTP. See [Workload Orchestration: SGLang](./workload-orchestration.md#sglang) for the arguments.
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 

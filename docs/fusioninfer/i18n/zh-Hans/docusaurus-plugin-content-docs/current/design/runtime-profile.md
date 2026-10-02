@@ -139,13 +139,10 @@ flowchart TB
 
 `backend` 必填，可选 `vllm` 和 `sglang`，同一个 RuntimeProfile 的所有角色使用相同的 backend。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker：Leader 建立分布式运行环境并对外提供推理服务，Worker 加入这个环境。backend adapter 只注入地址、rank、节点数等随 Leader 和 Worker 变化的启动参数，这些参数不能在 Profile 中预先声明，其余配置（包括 TP/PP/DP）都沿用 Profile 中的写法。
 
-#### vLLM {#backend-vllm}
+两种 backend 的多节点启动方式如下：
 
-启动入口是 `vllm serve`，Profile 声明模型路径和 TP/PP/DP 等引擎参数。设置 `multinode` 后，adapter 固定使用 vLLM 原生的 multiprocessing executor，为每个 Pod 注入 `--distributed-executor-backend mp`、`--nnodes`、`--master-addr`、`--master-port` 和 `--node-rank`，Worker 还会加上 `--headless`。只有 Leader 对外提供 HTTP 服务，Worker 只参与分布式执行。完整的 Leader 和 Worker 参数见[工作负载编排：vLLM](./workload-orchestration.md#vllm)。
-
-#### SGLang {#backend-sglang}
-
-启动入口是 `python3 -m sglang.launch_server`，Profile 声明模型参数、`--tp-size`、`--dp-size` 和每个 Pod 的 GPU 资源。设置 `multinode` 后，adapter 使用 SGLang 原生的分布式启动方式，为每个 Pod 注入 `--dist-init-addr`、`--nnodes` 和 `--node-rank`。只有 rank 0 提供 HTTP 服务，其他 rank 运行 scheduler 和分布式计算进程。完整的 Leader 和 Worker 参数见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
+- vLLM 使用原生的 multiprocessing executor，Worker 以 headless 模式加入 Leader，具体参数见[工作负载编排：vLLM](./workload-orchestration.md#vllm)。
+- SGLang 使用原生的分布式启动方式，只有 rank 0 对外提供 HTTP 服务，具体参数见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
