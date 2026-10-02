@@ -146,20 +146,13 @@ The two backends start across nodes as follows:
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 
-`spec.lora` declares whether the Profile supports LoRA and fixes the LoRA loading lifecycle:
+`spec.lora` declares whether the Profile supports LoRA and how LoRAs are loaded. When it is omitted, the Profile does not accept LoRA bindings.
 
-- When `lora` is omitted, the Profile does not accept LoRA bindings.
-- `loadingMode: preload` materializes and mounts all LoRAs before the engine starts. A change to the binding set produces a new workload revision.
-- `loadingMode: dynamic` loads or unloads LoRAs after the Base Model workload is running and does not restart the Base Model when the binding set changes.
-- `maxLoadedAdapters` limits the number of LoRAs that one InferenceDeployment can bind at the same time.
+- `loadingMode: preload` loads all LoRAs when the engine starts; a change to the bindings produces a new workload revision.
+- `loadingMode: dynamic` loads and unloads LoRAs in the running engine; a change to the bindings does not restart the Base Model.
+- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
 
-`maxLoadedAdapters` is a control-plane limit across backends. It does not replace the engine's own GPU memory, CPU cache, maximum LoRA rank, or batch concurrency settings. The Profile author continues to fix these backend-specific parameters in `podTemplate`; the LoRA integration for the corresponding backend validates that known parameters are compatible with the control-plane limit without modifying TP/PP/DP.
-
-The LoRA loading configuration is defined at the top level of the Profile, so Aggregated, Prefiller, and Decoder use the same mode. A P/D deployment must load every LoRA into all routable logical replicas of both the Prefiller and Decoder; it cannot select different loading modes for the two roles.
-
-In dynamic mode, the `InferenceDeployment` Controller calls a Pod-local LoRA management endpoint through the backend integration built into the Operator. The Controller is the only Reconciler and owns the desired bindings, retries, and status; the management endpoint performs only idempotent load, unload, and list operations. If the backend already provides a management interface that satisfies the contract, the Operator uses it directly. Otherwise, the Operator may inject a thin stateless proxy as a backend-specific implementation detail instead of running a second control loop. The management port is not added to the inference Service, InferencePool, or HTTPRoute.
-
-Multinode dynamic loading operates at the logical replica level. Depending on the engine's capabilities, the backend integration calls the Leader coordination interface or performs a controlled fan-out to all members of the logical replica. The logical replica is considered Ready only after the Leader and every Worker confirm that the target digest is loaded. Member selection, request formats, and error normalization remain internal to the backend integration and are not exposed through the RuntimeProfile interface.
+`lora` sits at the top level of the Profile, so all roles use the same loading mode. For how the Controller loads and unloads LoRAs, see [InferenceDeployment: LoRA Bindings](./inference-deployment.md#lora-bindings).
 
 ### PodTemplate {#podtemplate}
 

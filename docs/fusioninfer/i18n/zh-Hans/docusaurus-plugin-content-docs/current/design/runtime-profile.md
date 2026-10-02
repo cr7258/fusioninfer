@@ -146,20 +146,13 @@ flowchart TB
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
-`spec.lora` 声明该 Profile 是否支持 LoRA，并固定 LoRA 的加载生命周期：
+`spec.lora` 声明该 Profile 是否支持 LoRA，以及 LoRA 的加载方式。省略时，该 Profile 不接受 LoRA 绑定。
 
-- 省略 `lora` 时，该 Profile 不接受 LoRA 绑定。
-- `loadingMode: preload` 在引擎启动前下载、缓存并挂载全部 LoRA。绑定集合变化会生成新的 workload revision。
-- `loadingMode: dynamic` 在 Base Model 工作负载运行后加载或卸载 LoRA，不因绑定集合变化重启 Base Model。
-- `maxLoadedAdapters` 限制单个 InferenceDeployment 可以同时绑定的 LoRA 数量。
+- `loadingMode: preload`：引擎启动时加载全部 LoRA，绑定变化会生成新的 workload revision。
+- `loadingMode: dynamic`：在运行中的引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
+- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
 
-`maxLoadedAdapters` 是跨 backend 的控制面上限，不替代引擎自己的显存、CPU 缓存、最大 LoRA rank 或 batch 并发参数。这些 backend-specific 参数继续由 Profile 作者固定在 `podTemplate` 中；对应 backend 的 LoRA 集成会校验已知参数与控制面上限是否兼容，而不会修改 TP/PP/DP。
-
-LoRA 加载配置位于 Profile 顶层，因此 Aggregated、Prefiller 和 Decoder 使用相同模式。P/D 部署必须把每个 LoRA 加载到 Prefiller 与 Decoder 的全部可路由逻辑副本，不能为两个角色选择不同的加载模式。
-
-动态模式由 `InferenceDeployment` Controller 通过 Operator 内置的 backend integration 调用 Pod-local LoRA management endpoint。Controller 是唯一的 Reconciler，持有期望绑定、重试和状态；management endpoint 只执行幂等的 load、unload 和 list 操作。backend 已提供满足契约的管理接口时直接使用；否则 Operator 可以注入薄的无状态代理作为 backend-specific 实现细节，而不是再运行第二个控制循环。管理端口不会加入推理 Service、InferencePool 或 HTTPRoute。
-
-多节点的动态加载以逻辑副本为单位。backend integration 根据引擎能力调用 Leader 协调接口，或向该逻辑副本的全部成员执行受控 fan-out；只有 Leader 和全部 Worker 都确认目标 digest 已加载，该逻辑副本才计为 Ready。成员选择、请求格式和错误归一化隐藏在 backend integration 内，不进入 RuntimeProfile 接口。
+`lora` 位于 Profile 顶层，所有角色使用同一种加载方式。Controller 如何加载和卸载 LoRA，见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
 
 ### Pod 模板 {#podtemplate}
 
