@@ -1,11 +1,11 @@
 ---
 title: Model and ClusterModel
-description: Define namespaced or cluster-scoped immutable model artifacts and optional LoRA adapter bindings.
+description: Define namespaced or cluster-scoped model artifacts and optional LoRA adapter bindings.
 ---
 
 ## Overview {#overview}
 
-`Model` and `ClusterModel` declare the source of a model artifact and its version identifier:
+`Model` and `ClusterModel` declare the source of a model artifact:
 
 - `Model` is a Namespaced resource for models within a Namespace.
 - `ClusterModel` is a cluster-scoped resource for models shared across Namespaces.

@@ -5,7 +5,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 ## 概述 {#overview}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括 backend、推理镜像、启动参数、LoRA 加载能力、Pod 形态以及 Aggregated 或 Prefill/Decode 角色：
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署，以及 Aggregated 或 Prefill/Decode 角色。两者只有作用范围不同：
 
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
@@ -125,7 +125,7 @@ type MultinodeSpec struct {
 
 每个 backend 的受支持镜像契约、入口形式和 adapter 保留的编排参数必须随 Operator 版本记录并测试。RuntimeProfile 不能预先声明由 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突或自定义入口无法处理时，Controller 在消费 RuntimeProfile 时拒绝创建新工作负载。adapter 只识别版本化契约中的有限参数，不解析任意 CLI 或 shell 脚本，也不验证模型与 TP/PP/DP 的数学兼容性；这些参数由 Profile 作者负责验证。
 
-### LoRA 加载能力 {#lora-loading-capabilities}
+### LoRA 加载方式 {#lora-loading-capabilities}
 
 `spec.lora` 声明该 Profile 能否消费 `InferenceDeployment.spec.lora`，并固定 LoRA 的加载生命周期：
 

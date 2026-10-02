@@ -1,11 +1,11 @@
 ---
 title: Model 与 ClusterModel
-description: 定义命名空间级或集群级的不可变模型制品，以及可选的 LoRA 适配器绑定。
+description: 定义命名空间级或集群级的模型制品，以及可选的 LoRA 适配器绑定。
 ---
 
 ## 概述 {#overview}
 
-`Model` 和 `ClusterModel` 声明模型制品的来源及其版本标识：
+`Model` 和 `ClusterModel` 声明模型制品的来源：
 
 - `Model` 是 Namespaced 资源，用于 Namespace 内的模型。
 - `ClusterModel` 是 Cluster-scoped 资源，用于跨 Namespace 共享的模型。
