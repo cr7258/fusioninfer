@@ -92,8 +92,6 @@ type MultinodeSpec struct {
 }
 ```
 
-`podTemplate` is a complete `corev1.PodTemplateSpec`. The CRD embeds the Pod schema, so the API server validates the fields and types of the template when a Profile is created or updated. The embedded schema makes each of the two CRDs about 1.8 MB, more than client-side `kubectl apply` can store in its last-applied annotation, so install them with server-side apply, for example `kubectl apply --server-side`.
-
 ### Role Fields {#role-fields}
 
 The valid role field combinations are:

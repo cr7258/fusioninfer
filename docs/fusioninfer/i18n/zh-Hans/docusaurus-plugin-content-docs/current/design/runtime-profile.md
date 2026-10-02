@@ -92,8 +92,6 @@ type MultinodeSpec struct {
 }
 ```
 
-`podTemplate` 是完整的 `corev1.PodTemplateSpec`。CRD 中嵌入了 Pod 的 schema，创建或更新 Profile 时，API server 会校验模板的字段和类型。嵌入 Pod schema 后，两个 CRD 各约 1.8 MB，超出了客户端 `kubectl apply` 在 last-applied 注解中能保存的大小，需要使用 server-side apply 安装，例如 `kubectl apply --server-side`。
-
 ### 角色字段 {#role-fields}
 
 合法的角色字段组合如下：
