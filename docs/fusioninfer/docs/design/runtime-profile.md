@@ -39,9 +39,10 @@ spec:
 
 ### API Structure {#api-structure}
 
-`RuntimeProfile` and `ClusterRuntimeProfile` share the following Go interfaces:
+`RuntimeProfile` and `ClusterRuntimeProfile` share the following Go API:
 
 ```go
+// RuntimeBackend is the inference engine of the runtime.
 // +kubebuilder:validation:Enum=vllm;sglang;trtllm
 type RuntimeBackend string
 
@@ -51,6 +52,7 @@ const (
     RuntimeBackendTRTLLM RuntimeBackend = "trtllm"
 )
 
+// RuntimeProfileSpec declares a reusable inference runtime, and is shared by RuntimeProfile and ClusterRuntimeProfile.
 type RuntimeProfileSpec struct {
     Backend    RuntimeBackend        `json:"backend"`
     LoRA       *RuntimeLoRASpec       `json:"lora,omitempty"`
@@ -59,6 +61,7 @@ type RuntimeProfileSpec struct {
     Decoder    *RuntimeComponentSpec `json:"decoder,omitempty"`
 }
 
+// LoRALoadingMode is when the runtime loads the LoRA adapters bound to it.
 // +kubebuilder:validation:Enum=preload;dynamic
 type LoRALoadingMode string
 
@@ -67,6 +70,7 @@ const (
     LoRALoadingModeDynamic LoRALoadingMode = "dynamic"
 )
 
+// RuntimeLoRASpec declares how the runtime loads the LoRA adapters that an InferenceDeployment binds.
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
 
@@ -75,6 +79,7 @@ type RuntimeLoRASpec struct {
     MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
+// RuntimeComponentSpec declares one role: the Pod template of a logical replica and whether the replica spans several nodes.
 type RuntimeComponentSpec struct {
     // Decoded and validated as corev1.PodTemplateSpec.
     // +kubebuilder:pruning:PreserveUnknownFields
@@ -83,6 +88,7 @@ type RuntimeComponentSpec struct {
     Multinode *MultinodeSpec `json:"multinode,omitempty"`
 }
 
+// MultinodeSpec declares a logical replica that spans several nodes: one Leader and nodeCount - 1 Workers.
 type MultinodeSpec struct {
     // +kubebuilder:validation:Minimum=2
     NodeCount int32 `json:"nodeCount"`

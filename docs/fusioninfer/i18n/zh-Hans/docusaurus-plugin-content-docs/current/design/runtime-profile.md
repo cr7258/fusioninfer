@@ -42,6 +42,7 @@ spec:
 `RuntimeProfile` 与 `ClusterRuntimeProfile` 共享以下 Go 接口：
 
 ```go
+// RuntimeBackend 是运行时使用的推理引擎。
 // +kubebuilder:validation:Enum=vllm;sglang;trtllm
 type RuntimeBackend string
 
@@ -51,6 +52,7 @@ const (
     RuntimeBackendTRTLLM RuntimeBackend = "trtllm"
 )
 
+// RuntimeProfileSpec 声明可复用的推理运行时，由 RuntimeProfile 与 ClusterRuntimeProfile 共用。
 type RuntimeProfileSpec struct {
     Backend    RuntimeBackend        `json:"backend"`
     LoRA       *RuntimeLoRASpec       `json:"lora,omitempty"`
@@ -59,6 +61,7 @@ type RuntimeProfileSpec struct {
     Decoder    *RuntimeComponentSpec `json:"decoder,omitempty"`
 }
 
+// LoRALoadingMode 表示运行时在什么时候加载绑定的 LoRA 适配器。
 // +kubebuilder:validation:Enum=preload;dynamic
 type LoRALoadingMode string
 
@@ -67,6 +70,7 @@ const (
     LoRALoadingModeDynamic LoRALoadingMode = "dynamic"
 )
 
+// RuntimeLoRASpec 声明运行时如何加载 InferenceDeployment 绑定的 LoRA 适配器。
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
 
@@ -75,6 +79,7 @@ type RuntimeLoRASpec struct {
     MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
+// RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
 type RuntimeComponentSpec struct {
     // 解码并校验为 corev1.PodTemplateSpec。
     // +kubebuilder:pruning:PreserveUnknownFields
@@ -83,6 +88,7 @@ type RuntimeComponentSpec struct {
     Multinode *MultinodeSpec `json:"multinode,omitempty"`
 }
 
+// MultinodeSpec 声明跨多个节点的逻辑副本，包含一个 Leader 和 nodeCount - 1 个 Worker。
 type MultinodeSpec struct {
     // +kubebuilder:validation:Minimum=2
     NodeCount int32 `json:"nodeCount"`
