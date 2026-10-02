@@ -216,7 +216,7 @@ After a reference is resolved successfully, Status records the target object's K
 - Compatibility between the RuntimeProfile roles and the Deployment replica combination is validated after reference resolution.
 - When `lora` is declared, the RuntimeProfile must support LoRA, and the number of bindings cannot exceed `maxLoadedAdapters`.
 - The Controller must confirm that every binding references a LoRA Model and that its `baseModelRef` and the Deployment's Base Model reference resolve to the same UID.
-- The RuntimeProfile's backend adapter must support the images and entrypoint arguments in the template and must not conflict with the distributed orchestration parameters declared by the template. If unsupported, the Controller does not create new workloads and sets `ReferencesResolved=False`.
+- The current Operator version must support the image and entrypoint arguments in the RuntimeProfile template, and the template cannot declare the distributed parameters that the Controller injects for the backend. Otherwise, the Controller does not create new workloads and sets `ReferencesResolved=False`.
 - `InferenceDeployment.spec` can be updated. Changes to the Model, Runtime, cache mode, or Endpoint Picker strategy create a new revision pending promotion. Whether a LoRA change rebuilds the workload is determined by the RuntimeProfile's `loadingMode`.
 
 Constraints that do not require reading other objects are validated by CRD OpenAPI, CEL, or Admission. Whether references exist, roles match, Secret/PVC resources are available, and the Gateway accepts the Route is reconciled by the Controller and reported through Conditions, so resources can be created in any order.

@@ -137,7 +137,7 @@ flowchart TB
 
 ### Backend 分布式运行 {#distributed-backend-execution}
 
-当前支持 `vllm` 和 `sglang` 两种 backend，一个 RuntimeProfile 的所有角色都使用同一种。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker，并由 backend adapter 注入各自的分布式启动参数。
+当前支持 `vllm` 和 `sglang` 两种 backend，一个 RuntimeProfile 的所有角色都使用同一种。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker，并按 backend 注入各自的分布式启动参数。
 
 两种 backend 的多节点启动方式如下：
 
@@ -168,7 +168,7 @@ Pod 模板是完整的 `corev1.PodTemplateSpec`，但只允许一层模板：
 - 每个角色的 `podTemplate` 必须包含名为 `engine` 的容器。
 - `engine` 必须声明唯一的命名端口 `http`；多节点模式只把 Leader 注册为服务 Endpoint。
 - 所有 Pod 使用 Operator 配置的 Volcano scheduler；模板中的 `schedulerName` 必须为空或与该配置一致。
-- 同一份模板的 metadata、容器、资源和调度约束应用于 Leader 与 Worker，backend adapter 只生成角色相关的启动配置和保留环境变量。
+- 同一份模板的 metadata、容器、资源和调度约束应用于 Leader 与 Worker，Controller 只按角色调整启动配置和保留环境变量。
 - `InferenceDeployment` 不提供第二层 Pod override。
 - 模板 `metadata` 只允许设置 labels 和 annotations；资源名称、Namespace、OwnerReference、finalizer 和其他服务端元数据由 Controller 管理。
 - 配置 `lora` 时，模板入口必须符合对应 backend 的 LoRA 契约。Profile 负责声明引擎的 LoRA enablement、rank 和 backend-specific 容量参数；Deployment 不能覆盖这些参数。
@@ -224,8 +224,8 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - `podTemplate` 必须是合法的 `corev1.PodTemplateSpec`，由 API server 按 Pod schema 校验。
 - 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
 - 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
-- backend adapter 必须支持模板中声明的镜像和入口参数。
-- 模板不能声明 backend adapter 保留的 executor、地址、rank、`nnodes` 或 headless 参数。
+- 当前 Operator 版本必须支持模板中声明的镜像和入口参数。
+- 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes` 或 headless 参数。
 - 模板镜像必须使用 OCI digest 固定。
 - `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
 
@@ -364,7 +364,7 @@ spec:
           accelerator: h100
 ```
 
-`backend: vllm` adapter 根据 `nodeCount: 4` 为 Leader 和 Worker 注入 multiprocessing executor、节点数、地址和 rank。它保留 Profile 中固定的 `TP=8`、`PP=4` 和 `DP=1`，用户只维护一份 vLLM 参数和 Pod 模板。
+Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注入 multiprocessing executor、节点数、地址和 rank。它保留 Profile 中固定的 `TP=8`、`PP=4` 和 `DP=1`，用户只维护一份 vLLM 参数和 Pod 模板。
 
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 

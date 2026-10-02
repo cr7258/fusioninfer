@@ -137,7 +137,7 @@ flowchart TB
 
 ### Distributed Backend Execution {#distributed-backend-execution}
 
-Two backends are currently supported, `vllm` and `sglang`, and all roles of a RuntimeProfile use the same one. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`, and the backend adapter adds their distributed startup parameters.
+Two backends are currently supported, `vllm` and `sglang`, and all roles of a RuntimeProfile use the same one. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate` and injects their backend-specific distributed startup parameters.
 
 The two backends start across nodes as follows:
 
@@ -168,7 +168,7 @@ The PodTemplate is a complete `corev1.PodTemplateSpec`, but only one template la
 - Each role's `podTemplate` must contain a container named `engine`.
 - `engine` must declare exactly one named port called `http`; in multinode mode, only the Leader is registered as a service Endpoint.
 - All Pods use the Volcano scheduler configured by the Operator. The template's `schedulerName` must be empty or match that configuration.
-- The metadata, containers, resources, and scheduling constraints from the same template apply to the Leader and Workers; the backend adapter generates only role-specific startup configuration and reserved environment variables.
+- The metadata, containers, resources, and scheduling constraints from the same template apply to the Leader and Workers; the Controller adjusts only the startup configuration and reserved environment variables per role.
 - `InferenceDeployment` does not provide a second layer of Pod overrides.
 - Template `metadata` may contain only labels and annotations. Resource names, Namespace, OwnerReference, finalizers, and other server-side metadata are managed by the Controller.
 - When `lora` is configured, the template entrypoint must conform to the LoRA contract for the corresponding backend. The Profile declares the engine's LoRA enablement, rank, and backend-specific capacity parameters; the Deployment cannot override them.
@@ -224,8 +224,8 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 - `podTemplate` must be a valid `corev1.PodTemplateSpec`; the API server validates it against the Pod schema.
 - The template must contain an `engine` container and exactly one named `http` port.
 - The template cannot use Operator-reserved volumes, init containers, environment variables, mount paths, labels, or annotations.
-- The backend adapter must support the image and entrypoint arguments declared in the template.
-- The template cannot declare executor, address, rank, `nnodes`, or headless parameters reserved by the backend adapter.
+- The current Operator version must support the image and entrypoint arguments declared in the template.
+- The template cannot declare the executor, address, rank, `nnodes`, or headless parameters that the Controller injects for the backend.
 - The template image must be pinned by OCI digest.
 - `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
 
@@ -364,7 +364,7 @@ spec:
           accelerator: h100
 ```
 
-The `backend: vllm` adapter injects the multiprocessing executor, node count, address, and rank for the Leader and Workers based on `nodeCount: 4`. It preserves the `TP=8`, `PP=4`, and `DP=1` values fixed in the Profile, so the user maintains only one set of vLLM arguments and one PodTemplate.
+Based on `backend: vllm` and `nodeCount: 4`, the Controller injects the multiprocessing executor, node count, address, and rank for the Leader and Workers. It preserves the `TP=8`, `PP=4`, and `DP=1` values fixed in the Profile, so the user maintains only one set of vLLM arguments and one PodTemplate.
 
 ### RuntimeProfile: Dynamic LoRA {#runtimeprofile-dynamic-lora}
 

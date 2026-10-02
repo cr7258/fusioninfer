@@ -216,7 +216,7 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 - RuntimeProfile 角色与 Deployment 副本组合的一致性在引用解析后校验。
 - 声明 `lora` 时，RuntimeProfile 必须支持 LoRA，绑定数量不能超过 `maxLoadedAdapters`。
 - Controller 必须确认每个绑定引用 LoRA Model，并且其 `baseModelRef` 与 Deployment 的 Base Model 引用解析到相同 UID。
-- RuntimeProfile 的 backend adapter 必须支持模板中的镜像和入口参数，并且不能与模板声明的分布式编排参数冲突；不支持时 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
+- 当前 Operator 版本必须支持 RuntimeProfile 模板中的镜像和入口参数，模板也不能声明 Controller 按 backend 注入的分布式参数；否则 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
 - `InferenceDeployment.spec` 可以更新；Model、Runtime、缓存模式或 Endpoint Picker 策略变化会产生新的待提升 revision。LoRA 变化是否重建 workload 由 RuntimeProfile 的 `loadingMode` 决定。
 
 不需要读取其他对象的约束由 CRD OpenAPI、CEL 或 Admission 校验。引用是否存在、角色是否一致、Secret/PVC 是否可用以及 Gateway 是否接受 Route，由 Controller 调和并通过 Conditions 报告，因此资源可以按任意顺序创建。
