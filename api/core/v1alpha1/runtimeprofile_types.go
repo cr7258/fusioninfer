@@ -82,12 +82,6 @@ type RuntimeLoRASpec struct {
 	// LoadingMode is when the runtime loads the adapters.
 	// +required
 	LoadingMode LoRALoadingMode `json:"loadingMode"`
-
-	// MaxLoadedAdapters is the maximum number of adapters that one InferenceDeployment can bind.
-	// It is a control-plane limit and does not replace the capacity settings of the engine.
-	// +kubebuilder:validation:Minimum=1
-	// +required
-	MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
 // RuntimeComponentSpec declares one role of a runtime: the Pod template of a logical replica and,

@@ -72,10 +72,6 @@ const (
 // RuntimeLoRASpec declares how the runtime loads the LoRA adapters that an InferenceDeployment binds.
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
-
-    // Control-plane limit for one InferenceDeployment.
-    // +kubebuilder:validation:Minimum=1
-    MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
 // RuntimeComponentSpec declares one role: the Pod template of a logical replica and whether the replica spans several nodes.
@@ -150,16 +146,14 @@ The two backends start across nodes as follows:
 
 - `loadingMode: preload` loads all LoRAs when the inference engine starts; a change to the bindings redeploys the workload with the new LoRA list.
 - `loadingMode: dynamic` loads and unloads LoRAs in the running inference engine; a change to the bindings does not restart the Base Model.
-- `maxLoadedAdapters` is the maximum number of LoRAs that one InferenceDeployment can bind. It is a control-plane limit: the inference engine's own LoRA capacity settings, such as vLLM's `--max-loras`, stay in `podTemplate`, and the Controller checks that the two are compatible.
 
-The following example loads LoRAs in `dynamic` mode, and each InferenceDeployment can bind up to 8 LoRAs:
+The following example loads LoRAs in `dynamic` mode, and the LoRA capacity comes from the inference engine arguments in `podTemplate`, such as vLLM's `--max-loras`:
 
 ```yaml
 spec:
   backend: vllm
   lora:
     loadingMode: dynamic
-    maxLoadedAdapters: 8
   aggregated:
     podTemplate:
       spec:
@@ -229,7 +223,7 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 ### Defaults and Validation {#defaults-and-validation}
 
 - `backend` is required and must be `vllm` or `sglang`.
-- `lora.loadingMode` must be `preload` or `dynamic`; `maxLoadedAdapters` must be at least 1.
+- `lora.loadingMode` must be `preload` or `dynamic`.
 - A Profile can be consumed only when the current Operator version implements the selected LoRA mode for the specified backend and template entrypoint.
 - `aggregated` must be set, or both `prefiller` and `decoder` must be set.
 - Every declared role must provide a `podTemplate`.
@@ -381,7 +375,7 @@ Based on `backend: vllm` and `nodeCount: 4`, the Controller injects the multipro
 
 ### RuntimeProfile: Dynamic LoRA {#runtimeprofile-dynamic-lora}
 
-This Profile allows a Deployment to bind up to eight LoRAs dynamically. vLLM's LoRA enablement and backend-specific capacity remain fixed in the PodTemplate. The Operator configures the protected Pod-local management endpoint and the environment variables required for runtime updates, while the `InferenceDeployment` Controller reconciles loading state through the backend integration.
+This Profile loads LoRAs in `dynamic` mode. vLLM's LoRA enablement and backend-specific capacity are fixed in the PodTemplate. The Operator configures the protected Pod-local management endpoint and the environment variables required for runtime updates, while the `InferenceDeployment` Controller reconciles loading state through the backend integration.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -393,7 +387,6 @@ spec:
   backend: vllm
   lora:
     loadingMode: dynamic
-    maxLoadedAdapters: 8
   aggregated:
     podTemplate:
       spec:

@@ -130,7 +130,7 @@ Each binding contains two pieces of information:
 - `modelRef` must resolve to a LoRA Model that has `spec.lora.baseModelRef`.
 - `servedName` is the model name used to select the LoRA in an OpenAI-compatible request.
 
-After resolving a LoRA, the Controller must confirm that its `baseModelRef` and the Deployment's `modelRef` point to the same Kind, name, and UID. Bindings with the same `servedName` or duplicate `modelRef` values are rejected. The number of bindings cannot exceed the RuntimeProfile's `lora.maxLoadedAdapters`.
+After resolving a LoRA, the Controller must confirm that its `baseModelRef` and the Deployment's `modelRef` point to the same Kind, name, and UID. Bindings with the same `servedName` or duplicate `modelRef` values are rejected.
 
 The referenced RuntimeProfile must declare `spec.lora`:
 
@@ -214,7 +214,7 @@ After a reference is resolved successfully, Status records the target object's K
 - `endpoint.gatewayRef.name` is required.
 - `endpoint.endpointPicker.strategy` is allowed only for Aggregated deployments and must be one of the supported strategies.
 - Compatibility between the RuntimeProfile roles and the Deployment replica combination is validated after reference resolution.
-- When `lora` is declared, the RuntimeProfile must support LoRA, and the number of bindings cannot exceed `maxLoadedAdapters`.
+- When `lora` is declared, the referenced RuntimeProfile must declare `spec.lora`.
 - The Controller must confirm that every binding references a LoRA Model and that its `baseModelRef` and the Deployment's Base Model reference resolve to the same UID.
 - The current Operator version must support the image and entrypoint arguments in the RuntimeProfile template, and the template cannot declare the distributed parameters that the Controller injects for the backend. Otherwise, the Controller does not create new workloads and sets `ReferencesResolved=False`.
 - `InferenceDeployment.spec` can be updated. Changes to the Model, Runtime, cache mode, or Endpoint Picker strategy create a new revision pending promotion. Whether a LoRA change rebuilds the workload is determined by the RuntimeProfile's `loadingMode`.

@@ -112,11 +112,11 @@ func disaggregatedSpec() fusioninferiov1alpha1.RuntimeProfileSpec {
 	}
 }
 
-// withLoRA returns spec with the given LoRA loading mode and adapter limit.
+// withLoRA returns spec with the given LoRA loading mode.
 func withLoRA(
-	spec fusioninferiov1alpha1.RuntimeProfileSpec, mode fusioninferiov1alpha1.LoRALoadingMode, maxLoadedAdapters int32,
+	spec fusioninferiov1alpha1.RuntimeProfileSpec, mode fusioninferiov1alpha1.LoRALoadingMode,
 ) fusioninferiov1alpha1.RuntimeProfileSpec {
-	spec.LoRA = &fusioninferiov1alpha1.RuntimeLoRASpec{LoadingMode: mode, MaxLoadedAdapters: maxLoadedAdapters}
+	spec.LoRA = &fusioninferiov1alpha1.RuntimeLoRASpec{LoadingMode: mode}
 	return spec
 }
 
@@ -141,9 +141,9 @@ func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
 			Decoder:   engineRole(sglangImage),
 		}},
 		{"preload LoRA", "profile-lora-preload",
-			withLoRA(aggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModePreload, 4)},
+			withLoRA(aggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModePreload)},
 		{"dynamic LoRA", "profile-lora-dynamic",
-			withLoRA(disaggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModeDynamic, 8)},
+			withLoRA(disaggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModeDynamic)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -241,8 +241,7 @@ func TestRuntimeProfileSpecIsImmutable(t *testing.T) {
 				}},
 				{"lora", func(object client.Object) {
 					profileSpecOf(object).LoRA = &fusioninferiov1alpha1.RuntimeLoRASpec{
-						LoadingMode:       fusioninferiov1alpha1.LoRALoadingModeDynamic,
-						MaxLoadedAdapters: 4,
+						LoadingMode: fusioninferiov1alpha1.LoRALoadingModeDynamic,
 					}
 				}},
 				{"multinode", func(object client.Object) {

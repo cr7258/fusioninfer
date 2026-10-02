@@ -130,7 +130,7 @@ lora:
 - `modelRef` 必须解析到具有 `spec.lora.baseModelRef` 的 LoRA Model。
 - `servedName` 是 OpenAI-compatible 请求中选择该 LoRA 时使用的模型名称。
 
-Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `modelRef` 指向相同 Kind、名称和 UID。相同 `servedName` 和重复 `modelRef` 都会被拒绝。绑定数量不能超过 RuntimeProfile 的 `lora.maxLoadedAdapters`。
+Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `modelRef` 指向相同 Kind、名称和 UID。相同 `servedName` 和重复 `modelRef` 都会被拒绝。
 
 引用的 RuntimeProfile 必须声明 `spec.lora`：
 
@@ -214,7 +214,7 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 - `endpoint.gatewayRef.name` 必填。
 - `endpoint.endpointPicker.strategy` 只允许用于 Aggregated 部署，且必须属于支持的策略集合。
 - RuntimeProfile 角色与 Deployment 副本组合的一致性在引用解析后校验。
-- 声明 `lora` 时，RuntimeProfile 必须支持 LoRA，绑定数量不能超过 `maxLoadedAdapters`。
+- 声明 `lora` 时，引用的 RuntimeProfile 必须声明 `spec.lora`。
 - Controller 必须确认每个绑定引用 LoRA Model，并且其 `baseModelRef` 与 Deployment 的 Base Model 引用解析到相同 UID。
 - 当前 Operator 版本必须支持 RuntimeProfile 模板中的镜像和入口参数，模板也不能声明 Controller 按 backend 注入的分布式参数；否则 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
 - `InferenceDeployment.spec` 可以更新；Model、Runtime、缓存模式或 Endpoint Picker 策略变化会产生新的待提升 revision。LoRA 变化是否重建 workload 由 RuntimeProfile 的 `loadingMode` 决定。

@@ -29,9 +29,6 @@ import (
 type RuntimeLoRASpecApplyConfiguration struct {
 	// LoadingMode is when the runtime loads the adapters.
 	LoadingMode *corev1alpha1.LoRALoadingMode `json:"loadingMode,omitempty"`
-	// MaxLoadedAdapters is the maximum number of adapters that one InferenceDeployment can bind.
-	// It is a control-plane limit and does not replace the capacity settings of the engine.
-	MaxLoadedAdapters *int32 `json:"maxLoadedAdapters,omitempty"`
 }
 
 // RuntimeLoRASpecApplyConfiguration constructs a declarative configuration of the RuntimeLoRASpec type for use with
@@ -45,13 +42,5 @@ func RuntimeLoRASpec() *RuntimeLoRASpecApplyConfiguration {
 // If called multiple times, the LoadingMode field is set to the value of the last call.
 func (b *RuntimeLoRASpecApplyConfiguration) WithLoadingMode(value corev1alpha1.LoRALoadingMode) *RuntimeLoRASpecApplyConfiguration {
 	b.LoadingMode = &value
-	return b
-}
-
-// WithMaxLoadedAdapters sets the MaxLoadedAdapters field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the MaxLoadedAdapters field is set to the value of the last call.
-func (b *RuntimeLoRASpecApplyConfiguration) WithMaxLoadedAdapters(value int32) *RuntimeLoRASpecApplyConfiguration {
-	b.MaxLoadedAdapters = &value
 	return b
 }

@@ -72,10 +72,6 @@ const (
 // RuntimeLoRASpec 声明运行时如何加载 InferenceDeployment 绑定的 LoRA 适配器。
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
-
-    // 单个 InferenceDeployment 的控制面上限。
-    // +kubebuilder:validation:Minimum=1
-    MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
 // RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
@@ -150,16 +146,14 @@ flowchart TB
 
 - `loadingMode: preload`：推理引擎启动时加载全部 LoRA，绑定变化时会按新的 LoRA 列表重新部署工作负载。
 - `loadingMode: dynamic`：在运行中的推理引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
-- `maxLoadedAdapters`：单个 InferenceDeployment 最多可以绑定的 LoRA 数量。它是控制面上限，推理引擎自己的 LoRA 容量参数（例如 vLLM 的 `--max-loras`）仍写在 `podTemplate` 中，Controller 会检查两者是否兼容。
 
-下面的示例以 `dynamic` 方式加载 LoRA，每个 InferenceDeployment 最多绑定 8 个 LoRA：
+下面的示例以 `dynamic` 方式加载 LoRA，LoRA 容量由 `podTemplate` 中的推理引擎参数（例如 vLLM 的 `--max-loras`）决定：
 
 ```yaml
 spec:
   backend: vllm
   lora:
     loadingMode: dynamic
-    maxLoadedAdapters: 8
   aggregated:
     podTemplate:
       spec:
@@ -229,7 +223,7 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 ### 默认值与校验 {#defaults-and-validation}
 
 - `backend` 必填，只允许 `vllm` 或 `sglang`。
-- `lora.loadingMode` 只允许 `preload` 或 `dynamic`；`maxLoadedAdapters` 必须大于等于 1。
+- `lora.loadingMode` 只允许 `preload` 或 `dynamic`。
 - 只有当前 Operator 版本为指定 backend 和模板入口实现了对应 LoRA 模式时，Profile 才能被消费。
 - 必须设置 `aggregated`，或者同时设置 `prefiller` 和 `decoder`。
 - 每个已声明角色都必须提供 `podTemplate`。
@@ -381,7 +375,7 @@ Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注�
 
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 
-该 Profile 允许一个 Deployment 动态绑定最多八个 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量仍固定在 Pod 模板中；Operator 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，`InferenceDeployment` Controller 通过 backend integration 调和加载状态。
+该 Profile 以 `dynamic` 方式加载 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量固定在 Pod 模板中；Operator 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，`InferenceDeployment` Controller 通过 backend integration 调和加载状态。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -393,7 +387,6 @@ spec:
   backend: vllm
   lora:
     loadingMode: dynamic
-    maxLoadedAdapters: 8
   aggregated:
     podTemplate:
       spec:

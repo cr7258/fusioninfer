@@ -17234,16 +17234,8 @@ spec:
                     - preload
                     - dynamic
                     type: string
-                  maxLoadedAdapters:
-                    description: |-
-                      MaxLoadedAdapters is the maximum number of adapters that one InferenceDeployment can bind.
-                      It is a control-plane limit and does not replace the capacity settings of the engine.
-                    format: int32
-                    minimum: 1
-                    type: integer
                 required:
                 - loadingMode
-                - maxLoadedAdapters
                 type: object
               prefiller:
                 description: Prefiller declares the prefill role of Prefill/Decode
