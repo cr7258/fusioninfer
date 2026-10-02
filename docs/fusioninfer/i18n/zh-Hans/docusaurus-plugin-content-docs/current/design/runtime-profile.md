@@ -10,7 +10,9 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
 
-两个 Kind 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。下面是一个 `RuntimeProfile` 资源的示例：
+两个 Kind 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。
+
+下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Operator 注入的 `$(FUSION_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务。示例没有设置 `multinode` 和 `lora`，所以每个逻辑副本是单个 Pod，也不接受 LoRA 绑定：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

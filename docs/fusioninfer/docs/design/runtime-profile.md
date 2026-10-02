@@ -10,7 +10,9 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 - `RuntimeProfile` is a namespaced resource that can be reused within a Namespace.
 - `ClusterRuntimeProfile` is a cluster-scoped resource that can be shared across Namespaces.
 
-Both Kinds use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model. The following is an example of a `RuntimeProfile` resource:
+Both Kinds use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model.
+
+The following is an example of an Aggregated RuntimeProfile. It uses the vLLM inference engine: the `engine` container in the Pod template runs the vLLM image, reads the model from `$(FUSION_MODEL_PATH)`, which the Operator injects, and serves inference on port 8000, named `http`. The example sets neither `multinode` nor `lora`, so each logical replica is a single Pod and the Profile accepts no LoRA bindings:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
