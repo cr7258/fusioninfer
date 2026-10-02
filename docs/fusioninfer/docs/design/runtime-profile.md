@@ -138,7 +138,7 @@ flowchart TB
 
 ### Distributed Backend Execution {#distributed-backend-execution}
 
-`backend` is required and is one of `vllm`, `sglang` and `trtllm`. All roles in a RuntimeProfile use the same backend. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers only join it. The backend adapter rewrites only the startup arguments of the `engine` container, to inject the address, rank, node count and other parameters that differ between the Leader and the Workers, so a Profile cannot declare those parameters itself. The image, TP/PP/DP, resources, environment variables, volumes and scheduling constraints stay as the Profile declares them, and the Profile author is responsible for TP/PP/DP matching the model. The adapter supports only the entrypoints that each Operator version documents and tests; for an unrecognized entrypoint or conflicting parameters, the Controller refuses to create a new workload.
+`backend` is required, is one of `vllm`, `sglang` and `trtllm`, and applies to all roles of a RuntimeProfile. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers join it. The backend adapter injects only the startup parameters that differ between the Leader and the Workers, such as the address, rank and node count; a Profile cannot declare these parameters, and everything else, including TP/PP/DP, stays as the Profile declares it.
 
 #### vLLM {#backend-vllm}
 
