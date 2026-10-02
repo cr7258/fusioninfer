@@ -146,7 +146,7 @@ The two backends start across nodes as follows:
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 
-`spec.lora` declares whether the Profile can consume `InferenceDeployment.spec.lora` and fixes the LoRA loading lifecycle:
+`spec.lora` declares whether the Profile supports LoRA and fixes the LoRA loading lifecycle:
 
 - When `lora` is omitted, the Profile does not accept LoRA bindings.
 - `loadingMode: preload` materializes and mounts all LoRAs before the engine starts. A change to the binding set produces a new workload revision.

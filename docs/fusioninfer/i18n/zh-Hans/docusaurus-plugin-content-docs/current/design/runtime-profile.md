@@ -146,7 +146,7 @@ flowchart TB
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
-`spec.lora` 声明该 Profile 能否消费 `InferenceDeployment.spec.lora`，并固定 LoRA 的加载生命周期：
+`spec.lora` 声明该 Profile 是否支持 LoRA，并固定 LoRA 的加载生命周期：
 
 - 省略 `lora` 时，该 Profile 不接受 LoRA 绑定。
 - `loadingMode: preload` 在引擎启动前下载、缓存并挂载全部 LoRA。绑定集合变化会生成新的 workload revision。
