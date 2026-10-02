@@ -138,21 +138,19 @@ flowchart TB
 
 ### Distributed Backend Execution {#distributed-backend-execution}
 
-`backend` is required and supports `vllm`, `sglang`, and `trtllm`. It selects only the engine adapter; the role field combination still determines whether the mode is Aggregated or P/D. All roles in the same RuntimeProfile use the same backend.
+`backend` is required and is one of `vllm`, `sglang` and `trtllm`. It selects only the engine adapter, and the Controller never infers it from the image name or the command; all roles in a RuntimeProfile use the same backend. When `multinode` is set, the Controller derives the Leader and the Workers from the same `podTemplate`: the Leader sets up the distributed runtime and serves inference, and the Workers only join it. The backend adapter rewrites only the startup arguments of the `engine` container, to inject the address, rank, node count and other parameters that differ between the Leader and the Workers, so a Profile cannot declare those parameters itself. The image, TP/PP/DP, resources, environment variables, volumes and scheduling constraints stay as the Profile declares them, and the Profile author is responsible for TP/PP/DP matching the model. The adapter supports only the entrypoints that each Operator version documents and tests; for an unrecognized entrypoint or conflicting parameters, the Controller refuses to create a new workload.
 
-When `multinode` is set, the Controller generates the startup configuration according to the backend and the Pod's role within the logical replica:
+#### vLLM {#backend-vllm}
 
-- The RuntimeProfile author declares the image, engine parallelism parameters such as TP/PP/DP, resources, and scheduling constraints once, rather than maintaining separate Leader and Worker templates.
-- `multinode.nodeCount`, the accelerator resources for each Pod, and the engine parallelism parameters are fixed in the RuntimeProfile.
-- The Leader establishes the distributed runtime environment and starts the inference service; each Worker only joins the logical replica's distributed runtime environment.
-- The backend adapter may wrap or rewrite the `command` and `args` of the `engine` container in the generated Pod, but only to inject Leader/Worker orchestration differences such as the multiprocessing executor, address, rank, and `nnodes`.
-- The adapter does not derive or modify the TP/PP/DP declared by the RuntimeProfile based on `nodeCount`; these engine parallelism parameters remain unchanged across all logical replicas.
-- The adapter handles only the differences required for distributed startup; user-declared environment variables, resources, volumes, probes, and scheduling constraints continue to apply to every Pod.
-- The Controller does not infer the backend from the image name or arbitrary command strings.
+The entrypoint is `vllm serve`, and the Profile declares the model path and engine parameters such as TP/PP/DP. When `multinode` is set, the adapter always uses vLLM's native multiprocessing executor and injects `--distributed-executor-backend mp`, `--nnodes`, `--master-addr`, `--master-port` and `--node-rank` into every Pod, plus `--headless` for the Workers. Only the Leader serves HTTP; the Workers only take part in distributed execution. For the full Leader and Worker arguments, see [Workload Orchestration: vLLM](./workload-orchestration.md#vllm).
 
-Multinode vLLM always uses the multiprocessing executor. The backend adapter injects `--distributed-executor-backend mp` and the group startup arguments. SGLang uses its native distributed launcher. For Leader/Worker commands and managed parameters, see [Workload Orchestration: Distributed Backend Execution](./workload-orchestration.md#backend-distributed-execution).
+#### SGLang {#backend-sglang}
 
-The supported image contract, entrypoint forms, and adapter-reserved orchestration parameters for each backend must be documented and tested for every Operator version. A RuntimeProfile cannot predeclare the executor, address, rank, `nnodes`, or headless parameters managed by the adapter. If a conflict occurs or a custom entrypoint cannot be handled, the Controller rejects creation of a new workload when it consumes the RuntimeProfile. The adapter recognizes only the limited parameters defined by the versioned contract; it does not parse arbitrary CLI commands or shell scripts, nor does it validate the mathematical compatibility of the Model with TP/PP/DP. The Profile author is responsible for validating these parameters.
+The entrypoint is `python3 -m sglang.launch_server`, and the Profile declares the model parameters, `--tp-size`, `--dp-size` and the GPU resources of each Pod. When `multinode` is set, the adapter uses SGLang's native distributed launch and injects `--dist-init-addr`, `--nnodes` and `--node-rank` into every Pod. Only rank 0 serves HTTP; the other ranks run the scheduler and the distributed compute processes. For the full Leader and Worker arguments, see [Workload Orchestration: SGLang](./workload-orchestration.md#sglang).
+
+#### TensorRT-LLM {#backend-trtllm}
+
+The design currently defines only single-node TensorRT-LLM. It does not yet define a multinode entrypoint or the parameters that the adapter injects, so until the adapter supports them, a Profile with `backend: trtllm` cannot set `multinode`.
 
 ### LoRA Loading Capabilities {#lora-loading-capabilities}
 

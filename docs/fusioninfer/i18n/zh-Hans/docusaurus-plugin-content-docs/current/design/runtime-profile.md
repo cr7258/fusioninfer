@@ -138,21 +138,19 @@ flowchart TB
 
 ### Backend 分布式运行 {#distributed-backend-execution}
 
-`backend` 必填，支持 `vllm`、`sglang` 和 `trtllm`。它只选择引擎适配器；Aggregated 或 P/D 模式仍由角色字段组合决定。同一 RuntimeProfile 中的所有角色使用相同 backend。
+`backend` 必填，可选 `vllm`、`sglang` 和 `trtllm`，只决定使用哪个引擎适配器，Controller 不会根据镜像名或命令去猜测；同一个 RuntimeProfile 的所有角色使用相同的 backend。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker：Leader 建立分布式运行环境并对外提供推理服务，Worker 只加入这个环境。backend adapter 只改写 `engine` 容器的启动参数，注入地址、rank、节点数等随 Leader 和 Worker 变化的参数，Profile 不能预先声明这些参数；镜像、TP/PP/DP、资源、环境变量、volume 和调度约束都沿用 Profile 中的写法，TP/PP/DP 是否与模型匹配由 Profile 作者负责。adapter 只支持随 Operator 版本记录并测试过的启动入口，遇到无法识别的入口或冲突的参数时，Controller 拒绝创建新的工作负载。
 
-设置 `multinode` 后，Controller 根据 backend 和 Pod 在逻辑副本中的角色生成启动配置：
+#### vLLM {#backend-vllm}
 
-- RuntimeProfile 作者只声明一次镜像、TP/PP/DP 等引擎并行参数、资源和调度约束，不再分别编写 Leader 与 Worker 模板。
-- `multinode.nodeCount`、每个 Pod 的加速器资源和引擎并行参数固定在 RuntimeProfile 中。
-- Leader 负责建立分布式运行环境并启动推理服务；Worker 只加入该逻辑副本的分布式运行环境。
-- backend adapter 可以包装或重写生成后 Pod 中 `engine` 容器的 `command` 和 `args`，但仅用于注入 multiprocessing executor、地址、rank、`nnodes` 等 Leader/Worker 编排差异。
-- adapter 不根据 `nodeCount` 推导或修改 RuntimeProfile 声明的 TP/PP/DP；这些引擎并行参数在所有逻辑副本中保持不变。
-- adapter 只处理分布式启动所需的差异；用户声明的环境变量、资源、volume、探针和调度约束继续应用于所有 Pod。
-- Controller 不根据镜像名或任意命令字符串猜测 backend。
+启动入口是 `vllm serve`，Profile 声明模型路径和 TP/PP/DP 等引擎参数。设置 `multinode` 后，adapter 固定使用 vLLM 原生的 multiprocessing executor，为每个 Pod 注入 `--distributed-executor-backend mp`、`--nnodes`、`--master-addr`、`--master-port` 和 `--node-rank`，Worker 还会加上 `--headless`。只有 Leader 对外提供 HTTP 服务，Worker 只参与分布式执行。完整的 Leader 和 Worker 参数见[工作负载编排：vLLM](./workload-orchestration.md#vllm)。
 
-多节点 vLLM 固定使用 multiprocessing executor，`--distributed-executor-backend mp` 及组内启动参数由 backend adapter 注入。SGLang 使用原生分布式启动。Leader/Worker 命令和受管参数见 [工作负载编排：Backend 分布式运行](./workload-orchestration.md#backend-distributed-execution)。
+#### SGLang {#backend-sglang}
 
-每个 backend 的受支持镜像契约、入口形式和 adapter 保留的编排参数必须随 Operator 版本记录并测试。RuntimeProfile 不能预先声明由 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突或自定义入口无法处理时，Controller 在消费 RuntimeProfile 时拒绝创建新工作负载。adapter 只识别版本化契约中的有限参数，不解析任意 CLI 或 shell 脚本，也不验证模型与 TP/PP/DP 的数学兼容性；这些参数由 Profile 作者负责验证。
+启动入口是 `python3 -m sglang.launch_server`，Profile 声明模型参数、`--tp-size`、`--dp-size` 和每个 Pod 的 GPU 资源。设置 `multinode` 后，adapter 使用 SGLang 原生的分布式启动方式，为每个 Pod 注入 `--dist-init-addr`、`--nnodes` 和 `--node-rank`。只有 rank 0 提供 HTTP 服务，其他 rank 运行 scheduler 和分布式计算进程。完整的 Leader 和 Worker 参数见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
+
+#### TensorRT-LLM {#backend-trtllm}
+
+目前设计只定义了 TensorRT-LLM 的单节点运行，还没有定义多节点的启动入口和 adapter 注入的参数。在 adapter 支持之前，`backend: trtllm` 的 Profile 不能设置 `multinode`。
 
 ### LoRA 加载方式 {#lora-loading-capabilities}
 
