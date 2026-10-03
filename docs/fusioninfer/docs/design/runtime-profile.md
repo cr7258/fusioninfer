@@ -170,7 +170,7 @@ spec:
 
 ### PodTemplate {#podtemplate}
 
-`podTemplate` is a complete [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494). The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader is registered as a service Endpoint.
+`podTemplate` is a complete [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494). The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader receives inference requests.
 
 The Operator injects the following into the generated Pods, and the template cannot declare these names or paths:
 
