@@ -180,7 +180,9 @@ Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声
 | 环境变量 | `FUSION_MODEL_METADATA_PATH` | 模型元数据文件 `/var/run/fusioninfer/model/model.json` |
 | 环境变量 | `FUSION_LORA_ROOT` | LoRA 目录 `/adapters`，只读挂载，只包含当前 Deployment 绑定的 LoRA |
 | 环境变量 | `FUSION_LORA_MANIFEST` | LoRA 清单 `/var/run/fusioninfer/lora/adapters.json`，记录每个 `servedName` 对应的 LoRA 路径 |
-| Volume | `fusioninfer-model`、`fusioninfer-model-metadata`、`fusioninfer-lora` | 挂载上面的目录和文件 |
+| Volume | `fusioninfer-model` | 挂载模型目录 `/models` |
+| Volume | `fusioninfer-model-metadata` | 挂载模型元数据文件 `model.json` |
+| Volume | `fusioninfer-lora` | 挂载 LoRA 目录 `/adapters` |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
 `FUSION_LORA_ROOT`、`FUSION_LORA_MANIFEST` 和 `fusioninfer-lora` 只在 InferenceDeployment 声明了 LoRA 绑定时注入。`dynamic` 模式下，Operator 还会开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`。

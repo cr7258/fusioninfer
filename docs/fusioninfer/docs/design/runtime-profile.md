@@ -180,7 +180,9 @@ The Operator injects the following into the generated Pods, and the template can
 | Environment variable | `FUSION_MODEL_METADATA_PATH` | The Model metadata file `/var/run/fusioninfer/model/model.json` |
 | Environment variable | `FUSION_LORA_ROOT` | The LoRA directory `/adapters`, mounted read-only, with only the LoRAs bound to the current Deployment |
 | Environment variable | `FUSION_LORA_MANIFEST` | The LoRA manifest `/var/run/fusioninfer/lora/adapters.json`, which maps each `servedName` to its LoRA path |
-| Volume | `fusioninfer-model`, `fusioninfer-model-metadata`, `fusioninfer-lora` | Mount the directories and files above |
+| Volume | `fusioninfer-model` | Mounts the Model directory `/models` |
+| Volume | `fusioninfer-model-metadata` | Mounts the Model metadata file `model.json` |
+| Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
 
 `FUSION_LORA_ROOT`, `FUSION_LORA_MANIFEST` and `fusioninfer-lora` are injected only when the InferenceDeployment declares LoRA bindings. In `dynamic` mode, the Operator also turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM.
