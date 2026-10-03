@@ -209,6 +209,7 @@ The Controller injects the following into the generated Pods. A template that de
 | Type | Name | Description |
 | --- | --- | --- |
 | Environment variable | `FUSIONINFER_MODEL_PATH` | Set to the Model directory `/models`. Startup commands should read the Model through `$(FUSIONINFER_MODEL_PATH)` |
+| Environment variable | `VLLM_NIXL_SIDE_CHANNEL_HOST` | Injected only into the roles of a vLLM P/D runtime and set to the Pod IP, so that NixlConnector can complete the handshake between the Prefiller and Decoder |
 | Volume | `fusioninfer-model` | Mounts the Model directory `/models` read-only |
 | Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` read-only, with only the LoRAs bound to the current Deployment |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
@@ -274,7 +275,7 @@ spec:
 
 ### ClusterRuntimeProfile: Prefill/Decode Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. `VLLM_NIXL_SIDE_CHANNEL_HOST` is set to the Pod IP; otherwise the Decoder cannot reach the Prefiller across Pods. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
+Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. The Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, which the handshake needs, so the template does not set it. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -295,11 +296,6 @@ spec:
               - "2"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -318,11 +314,6 @@ spec:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000

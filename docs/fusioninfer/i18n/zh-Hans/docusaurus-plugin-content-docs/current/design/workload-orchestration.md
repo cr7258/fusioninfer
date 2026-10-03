@@ -325,6 +325,8 @@ Volcano 将其识别为两个四 Pod subgroup。单节点 Aggregated 部署使�
 
 Prefill/Decode Profile 同时包含 `prefiller` 和 `decoder`。Controller 为整个 P/D revision 生成一个 DisaggregatedSet；每个 role 映射为一个由 DisaggregatedSet 管理的 LeaderWorkerSet。两个角色可以拥有不同的 Pod 模板、逻辑副本数和 `nodeCount`，DisaggregatedSet 负责统一 revision、协调 rollout、角色状态和 Headless Service。
 
+backend 为 vLLM 时，Controller 为 Prefiller 和 Decoder 的每个 Pod 注入 `VLLM_NIXL_SIDE_CHANNEL_HOST`，值为本 Pod 的 IP。NixlConnector 默认用 `localhost` 做握手，跨 Pod 时 Decoder 需要这个地址才能连上 Prefiller。
+
 该映射要求集群安装包含 `disaggregatedset.x-k8s.io/v1` CRD 的 LeaderWorkerSet v0.9.0 或更高版本。Controller 在启动时发现该 API；缺少时，P/D InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `DisaggregatedSetUnavailable`。
 
 该配置规定每个 Prefiller 副本使用两个节点、每个 Decoder 副本使用四个节点。InferenceDeployment 请求一个 Prefiller 副本和两个 Decoder 副本：
@@ -354,11 +356,6 @@ spec:
               - "1"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -387,11 +384,6 @@ spec:
               - "1"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000

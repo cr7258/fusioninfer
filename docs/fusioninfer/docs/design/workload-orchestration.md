@@ -325,6 +325,8 @@ Volcano recognizes these as two four-Pod subgroups. A single-node Aggregated dep
 
 A Prefill/Decode Profile contains both `prefiller` and `decoder`. The Controller generates one DisaggregatedSet for the entire P/D revision; each role maps to a LeaderWorkerSet managed by the DisaggregatedSet. The two roles can have different Pod templates, logical replica counts, and `nodeCount` values. The DisaggregatedSet owns the unified revision, coordinated rollout, role status, and Headless Service.
 
+When the backend is vLLM, the Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, set to the Pod IP, into every Prefiller and Decoder Pod. NixlConnector uses `localhost` for the handshake by default, and across Pods the Decoder needs this address to reach the Prefiller.
+
 This mapping requires LeaderWorkerSet v0.9.0 or later, including the `disaggregatedset.x-k8s.io/v1` CRD, to be installed in the cluster. The Controller discovers this API at startup. If it is missing, the P/D InferenceDeployment sets `WorkloadsReady=False` with reason `DisaggregatedSetUnavailable`.
 
 The following configuration assigns two nodes to each Prefiller replica and four nodes to each Decoder replica. The InferenceDeployment requests one Prefiller replica and two Decoder replicas:
@@ -354,11 +356,6 @@ spec:
               - "1"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -387,11 +384,6 @@ spec:
               - "1"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000

@@ -209,6 +209,7 @@ Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再�
 | 类型 | 名称 | 说明 |
 | --- | --- | --- |
 | 环境变量 | `FUSIONINFER_MODEL_PATH` | 值为模型目录 `/models`。启动命令应通过 `$(FUSIONINFER_MODEL_PATH)` 读取模型 |
+| 环境变量 | `VLLM_NIXL_SIDE_CHANNEL_HOST` | 只在 vLLM 的 P/D 角色中注入，值为本 Pod 的 IP，供 NixlConnector 完成 Prefiller 和 Decoder 之间的握手 |
 | Volume | `fusioninfer-model` | 只读挂载模型目录 `/models` |
 | Volume | `fusioninfer-lora` | 只读挂载 LoRA 目录 `/adapters`，只包含当前 Deployment 绑定的 LoRA |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
@@ -274,7 +275,7 @@ spec:
 
 ### ClusterRuntimeProfile：Prefill/Decode 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。`VLLM_NIXL_SIDE_CHANNEL_HOST` 设为 Pod IP，否则跨 Pod 时 Decoder 连不上 Prefiller。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
+Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。握手需要的 `VLLM_NIXL_SIDE_CHANNEL_HOST` 由 Controller 注入，模板里不用写。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -295,11 +296,6 @@ spec:
               - "2"
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -318,11 +314,6 @@ spec:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-            env:
-              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
-                valueFrom:
-                  fieldRef:
-                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
