@@ -194,8 +194,8 @@ func TestRuntimeProfileRejectsInvalidRoles(t *testing.T) {
 func TestRuntimeProfileKeepsPodTemplateMetadata(t *testing.T) {
 	t.Parallel()
 	metadata := metav1.ObjectMeta{
-		Labels:      map[string]string{"example.fusioninfer.io/runtime": "vllm"},
-		Annotations: map[string]string{"example.fusioninfer.io/owner": "team-a"},
+		Labels:      map[string]string{"example.com/runtime": "vllm"},
+		Annotations: map[string]string{"example.com/owner": "team-a"},
 	}
 	spec := aggregatedSpec()
 	spec.Aggregated.PodTemplate.ObjectMeta = metadata

@@ -205,7 +205,7 @@ The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references ar
 
 ### RuntimeProfile: Single-Node Aggregated {#runtimeprofile-single-node-aggregated}
 
-This Profile describes an Aggregated logical replica that uses one A10 GPU, with a template label, a readiness probe on the `http` port, and CPU and memory requests.
+This Profile describes an Aggregated logical replica that uses one A10 GPU, with a readiness probe on the `http` port and CPU and memory requests.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -217,9 +217,6 @@ spec:
   backend: vllm
   aggregated:
     podTemplate:
-      metadata:
-        labels:
-          example.fusioninfer.io/runtime: vllm
       spec:
         containers:
           - name: engine
