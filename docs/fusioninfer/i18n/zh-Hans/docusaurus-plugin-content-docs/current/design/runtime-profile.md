@@ -170,7 +170,7 @@ spec:
 
 ### Pod 模板 {#podtemplate}
 
-`podTemplate` 是完整的 `corev1.PodTemplateSpec`，InferenceDeployment 不能再覆盖其中的字段。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 注册为服务 Endpoint。
+`podTemplate` 是完整的 [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494)。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 注册为服务 Endpoint。
 
 Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径：
 
