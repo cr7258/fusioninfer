@@ -166,7 +166,7 @@ spec:
               - "8"
 ```
 
-`lora` 位于 Profile 顶层，所有角色使用同一种加载方式。Controller 如何加载和卸载 LoRA，见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
+`lora` 位于 Profile 顶层，所有角色使用同一种加载方式。LoRA 的加载和卸载流程见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
 
 ### Pod 模板 {#podtemplate}
 

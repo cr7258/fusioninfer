@@ -166,7 +166,7 @@ spec:
               - "8"
 ```
 
-`lora` sits at the top level of the Profile, so all roles use the same loading mode. For how the Controller loads and unloads LoRAs, see [InferenceDeployment: LoRA Bindings](./inference-deployment.md#lora-bindings).
+`lora` sits at the top level of the Profile, so all roles use the same loading mode. See [InferenceDeployment: LoRA Bindings](./inference-deployment.md#lora-bindings) for how LoRAs are loaded and unloaded.
 
 ### PodTemplate {#podtemplate}
 
