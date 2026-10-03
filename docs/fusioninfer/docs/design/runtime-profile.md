@@ -197,24 +197,6 @@ The Controller injects `fusioninfer-lora` only when the InferenceDeployment bind
 
 The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references are looked up in the Namespace of the InferenceDeployment that uses it. They are not checked when the Profile is created; a missing one is reported in the InferenceDeployment status.
 
-### Defaults and Validation {#defaults-and-validation}
-
-- `backend` is required and must be `vllm` or `sglang`.
-- `lora.loadingMode` must be `preload` or `dynamic`.
-- A Profile can be consumed only when the current FusionInfer version implements the selected LoRA mode for the specified backend and template entrypoint.
-- `aggregated` must be set, or both `prefiller` and `decoder` must be set.
-- Every declared role must provide a `podTemplate`.
-- When `multinode` is set, `nodeCount` must be at least 2; when it is omitted, the role is treated as single-node.
-- `podTemplate` must be a valid `corev1.PodTemplateSpec`; the API server validates it against the Pod schema.
-- The template must contain an `engine` container and exactly one named `http` port.
-- Template `metadata` may contain only labels and annotations.
-- The template's `schedulerName` must be empty or equal to the Volcano scheduler configured for FusionInfer.
-- The template cannot use the volumes, init containers, environment variables, mount paths, labels, or annotations that the Controller injects.
-- The current FusionInfer version must support the image and entrypoint arguments declared in the template.
-- The template cannot declare the executor, address, rank, `nnodes`, headless, or LoRA list parameters that the Controller injects for the backend.
-- The template image must be pinned by OCI digest. For readability, the examples in this document use version tags.
-- `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
-
 ## Status {#status}
 
 `RuntimeProfile` and `ClusterRuntimeProfile` do not provide a status subresource and do not require a dedicated Controller. Admission validates constraints within the object, while the consuming `InferenceDeployment.status` holds the state of Namespaced dependencies and the actual runtime.

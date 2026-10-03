@@ -197,24 +197,6 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 模板引用的 ServiceAccount、Secret、ConfigMap 和 PVC 都在使用它的 InferenceDeployment 所在的 Namespace 中查找。创建 Profile 时不检查它们是否存在，缺失时由 InferenceDeployment 的 status 报告。
 
-### 默认值与校验 {#defaults-and-validation}
-
-- `backend` 必填，只允许 `vllm` 或 `sglang`。
-- `lora.loadingMode` 只允许 `preload` 或 `dynamic`。
-- 只有当前 FusionInfer 版本为指定 backend 和模板入口实现了对应 LoRA 模式时，Profile 才能被消费。
-- 必须设置 `aggregated`，或者同时设置 `prefiller` 和 `decoder`。
-- 每个已声明角色都必须提供 `podTemplate`。
-- 设置 `multinode` 时，`nodeCount` 必须大于等于 2；省略时按单节点处理。
-- `podTemplate` 必须是合法的 `corev1.PodTemplateSpec`，由 API server 按 Pod schema 校验。
-- 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
-- 模板 `metadata` 只能设置 labels 和 annotations。
-- 模板中的 `schedulerName` 必须为空或等于 FusionInfer 配置的 Volcano scheduler。
-- 模板不能占用 Controller 注入的 volume、init container、环境变量、挂载路径、label 或 annotation。
-- 当前 FusionInfer 版本必须支持模板中声明的镜像和入口参数。
-- 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes`、headless 参数或 LoRA 列表。
-- 模板镜像必须使用 OCI digest 固定。本文示例为了便于阅读使用版本 tag。
-- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
-
 ## Status {#status}
 
 `RuntimeProfile` 和 `ClusterRuntimeProfile` 不提供 status subresource，也不需要独立 Controller。对象内约束由 Admission 校验，Namespace 依赖和实际运行状态由消费它的 `InferenceDeployment.status` 持有。
