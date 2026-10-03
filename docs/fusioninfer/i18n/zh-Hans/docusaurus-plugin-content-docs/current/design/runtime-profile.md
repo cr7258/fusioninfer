@@ -273,7 +273,7 @@ spec:
           accelerator: a10
 ```
 
-### ClusterRuntimeProfile：Prefill/Decode 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
+### ClusterRuntimeProfile：vLLM P/D 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
 Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。握手需要的 `VLLM_NIXL_SIDE_CHANNEL_HOST` 由 Controller 注入，模板里不用写。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
 
@@ -314,6 +314,77 @@ spec:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+```
+
+### ClusterRuntimeProfile：SGLang P/D 分离 {#clusterruntimeprofile-sglang-prefilldecode-disaggregation}
+
+Prefiller 和 Decoder 分别用 `--disaggregation-mode prefill` 和 `--disaggregation-mode decode` 启动，示例用 NIXL 传输 KV cache，和上面的 vLLM 示例一致。SGLang 不需要注入 `VLLM_NIXL_SIDE_CHANNEL_HOST` 这类地址：路由层在每个请求里带上选中的 Prefill Pod 的地址，Decoder 据此连到 Prefill 的 bootstrap 端口（默认 8998）。两个角色都要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterRuntimeProfile
+metadata:
+  name: sglang-pd-h100-r1
+spec:
+  backend: sglang
+  prefiller:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - prefill
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+  decoder:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - decode
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
             ports:
               - name: http
                 containerPort: 8000

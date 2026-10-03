@@ -273,7 +273,7 @@ spec:
           accelerator: a10
 ```
 
-### ClusterRuntimeProfile: Prefill/Decode Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
+### ClusterRuntimeProfile: vLLM P/D Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
 
 Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. The Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, which the handshake needs, so the template does not set it. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
 
@@ -314,6 +314,77 @@ spec:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+```
+
+### ClusterRuntimeProfile: SGLang P/D Disaggregation {#clusterruntimeprofile-sglang-prefilldecode-disaggregation}
+
+The Prefiller and Decoder start with `--disaggregation-mode prefill` and `--disaggregation-mode decode`, and the example transfers the KV cache through NIXL, like the vLLM example above. SGLang needs no injected address such as `VLLM_NIXL_SIDE_CHANNEL_HOST`: the routing layer puts the address of the chosen Prefill Pod into each request, and the Decoder uses it to connect to the Prefill bootstrap port (8998 by default). Both roles set `--host 0.0.0.0` and `--port 8000` to match the `http` port.
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterRuntimeProfile
+metadata:
+  name: sglang-pd-h100-r1
+spec:
+  backend: sglang
+  prefiller:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - prefill
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+  decoder:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - decode
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
             ports:
               - name: http
                 containerPort: 8000
