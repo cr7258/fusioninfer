@@ -12,7 +12,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 `RuntimeProfile` 和 `ClusterRuntimeProfile` 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。
 
-下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Operator 注入的 `$(FUSIONINFER_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务：
+下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Controller 注入的 `$(FUSIONINFER_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -172,7 +172,7 @@ spec:
 
 `podTemplate` 是完整的 [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494)。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 接收推理请求。
 
-Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径：
+Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径，否则创建或更新 Profile 时会被拒绝：
 
 | 类型 | 名称 | 说明 |
 | --- | --- | --- |
@@ -200,16 +200,16 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 
 - `backend` 必填，只允许 `vllm` 或 `sglang`。
 - `lora.loadingMode` 只允许 `preload` 或 `dynamic`。
-- 只有当前 Operator 版本为指定 backend 和模板入口实现了对应 LoRA 模式时，Profile 才能被消费。
+- 只有当前 FusionInfer 版本为指定 backend 和模板入口实现了对应 LoRA 模式时，Profile 才能被消费。
 - 必须设置 `aggregated`，或者同时设置 `prefiller` 和 `decoder`。
 - 每个已声明角色都必须提供 `podTemplate`。
 - 设置 `multinode` 时，`nodeCount` 必须大于等于 2；省略时按单节点处理。
 - `podTemplate` 必须是合法的 `corev1.PodTemplateSpec`，由 API server 按 Pod schema 校验。
 - 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
 - 模板 `metadata` 只能设置 labels 和 annotations。
-- 模板中的 `schedulerName` 必须为空或等于 Operator 配置的 Volcano scheduler。
-- 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
-- 当前 Operator 版本必须支持模板中声明的镜像和入口参数。
+- 模板中的 `schedulerName` 必须为空或等于 FusionInfer 配置的 Volcano scheduler。
+- 模板不能占用 Controller 注入的 volume、init container、环境变量、挂载路径、label 或 annotation。
+- 当前 FusionInfer 版本必须支持模板中声明的镜像和入口参数。
 - 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes`、headless 参数或 LoRA 列表。
 - 模板镜像必须使用 OCI digest 固定。本文示例为了便于阅读使用版本 tag。
 - `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
@@ -353,7 +353,7 @@ Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注�
 
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 
-该 Profile 以 `dynamic` 方式加载 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量固定在 Pod 模板中；Operator 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，`InferenceDeployment` Controller 通过 backend integration 调和加载状态。
+该 Profile 以 `dynamic` 方式加载 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量固定在 Pod 模板中；`InferenceDeployment` Controller 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，并通过 backend integration 调和加载状态。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

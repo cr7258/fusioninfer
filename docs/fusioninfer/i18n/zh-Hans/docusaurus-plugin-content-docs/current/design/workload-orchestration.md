@@ -642,7 +642,7 @@ python3 -m sglang.launch_server \
 
 RuntimeProfile 固定模型参数、TP/PP/DP、镜像和每 Pod 资源。backend adapter 固定 vLLM 的 multiprocessing executor，并添加随 Leader/Worker 变化的地址、rank、节点数和 headless 参数；LWS 提供 group 内的地址与索引。
 
-adapter 只接受 Operator 版本明确支持的入口形式，例如 `vllm serve` 和 `python3 -m sglang.launch_server`。它可以识别有限且有版本约束的参数，但不会解析任意 shell 脚本，也不会验证模型结构与 TP/PP/DP 的数学兼容性。无法识别的入口、重复的保留参数或不支持的参数组合都会使新工作负载保持未创建状态。
+adapter 只接受当前 FusionInfer 版本明确支持的入口形式，例如 `vllm serve` 和 `python3 -m sglang.launch_server`。它可以识别有限且有版本约束的参数，但不会解析任意 shell 脚本，也不会验证模型结构与 TP/PP/DP 的数学兼容性。无法识别的入口、重复的保留参数或不支持的参数组合都会使新工作负载保持未创建状态。
 
 ## Gang Scheduling {#gang-scheduling}
 
@@ -682,9 +682,9 @@ PodGroup 使用全局准入和逻辑副本原子性两个层次：
 
 共享 PodGroup 的 `minMember` 覆盖待发布 revision 的全部期望成员，因此该 revision 不支持只调度部分期望容量。资源不足时新 LWS 保持 Pending，上一 active revision 继续接收流量。该行为与“所有期望逻辑副本 Ready 后才提升 revision”的发布条件一致。
 
-Controller 把生成的 Pod `schedulerName` 设置为 Operator 配置的 Volcano scheduler。RuntimeProfile 中的 `schedulerName` 必须为空或与该值一致；冲突值会被拒绝，不进行静默覆盖。
+Controller 把生成的 Pod `schedulerName` 设置为 FusionInfer 配置的 Volcano scheduler。RuntimeProfile 中的 `schedulerName` 必须为空或与该值一致；冲突值会被拒绝，不进行静默覆盖。
 
-`SubGroupPolicy` 需要 Volcano v1.14 或更高版本。Operator 启动时必须发现 PodGroup CRD 是否包含 `spec.subGroupPolicy`；缺少该能力时，InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `UnsupportedVolcanoVersion`，不能静默退化为只有 `minMember` 的调度。
+`SubGroupPolicy` 需要 Volcano v1.14 或更高版本。Controller 启动时必须发现 PodGroup CRD 是否包含 `spec.subGroupPolicy`；缺少该能力时，InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `UnsupportedVolcanoVersion`，不能静默退化为只有 `minMember` 的调度。
 
 ## 扩缩容 {#scaling}
 

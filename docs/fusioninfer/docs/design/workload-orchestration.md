@@ -642,7 +642,7 @@ Only rank 0 serves HTTP. The other ranks run the SGLang scheduler and distribute
 
 RuntimeProfile owns the model parameters, TP/PP/DP, image, and per-Pod resources. The backend adapter selects the multiprocessing executor for vLLM and adds the address, rank, node count, and headless arguments that vary between Leaders and Workers; LWS provides the in-group address and index.
 
-The adapter accepts only entry-point forms explicitly supported by the Operator version, such as `vllm serve` and `python3 -m sglang.launch_server`. It can recognize a limited, version-constrained set of arguments, but it does not parse arbitrary shell scripts or validate the mathematical compatibility of the model architecture with TP/PP/DP. An unrecognized entry point, duplicate reserved arguments, or an unsupported argument combination leaves the new workload uncreated.
+The adapter accepts only entry-point forms explicitly supported by the current FusionInfer version, such as `vllm serve` and `python3 -m sglang.launch_server`. It can recognize a limited, version-constrained set of arguments, but it does not parse arbitrary shell scripts or validate the mathematical compatibility of the model architecture with TP/PP/DP. An unrecognized entry point, duplicate reserved arguments, or an unsupported argument combination leaves the new workload uncreated.
 
 ## Gang Scheduling {#gang-scheduling}
 
@@ -682,9 +682,9 @@ Two four-node Aggregated replicas correspond to `minMember: 8`, `subGroupSize: 4
 
 The shared PodGroup's `minMember` covers every desired member of the pending revision, so the revision does not support scheduling only part of the desired capacity. When resources are insufficient, the new LWS remains Pending and the previous active revision continues to receive traffic. This behavior matches the promotion condition that a revision is promoted only after all desired logical replicas are Ready.
 
-The Controller sets each generated Pod's `schedulerName` to the Volcano scheduler configured for the Operator. `schedulerName` in the RuntimeProfile must be unset or match that value; a conflicting value is rejected rather than silently overwritten.
+The Controller sets each generated Pod's `schedulerName` to the Volcano scheduler configured for FusionInfer. `schedulerName` in the RuntimeProfile must be unset or match that value; a conflicting value is rejected rather than silently overwritten.
 
-`SubGroupPolicy` requires Volcano v1.14 or later. At startup, the Operator must discover whether the PodGroup CRD includes `spec.subGroupPolicy`. If that capability is missing, the InferenceDeployment sets `WorkloadsReady=False` with reason `UnsupportedVolcanoVersion`; it cannot silently degrade to scheduling with only `minMember`.
+`SubGroupPolicy` requires Volcano v1.14 or later. At startup, the Controller must discover whether the PodGroup CRD includes `spec.subGroupPolicy`. If that capability is missing, the InferenceDeployment sets `WorkloadsReady=False` with reason `UnsupportedVolcanoVersion`; it cannot silently degrade to scheduling with only `minMember`.
 
 ## Scaling {#scaling}
 

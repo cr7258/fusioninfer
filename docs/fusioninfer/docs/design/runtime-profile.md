@@ -12,7 +12,7 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 
 `RuntimeProfile` and `ClusterRuntimeProfile` use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model.
 
-The following is an example of an Aggregated RuntimeProfile. It uses the vLLM inference engine. The `engine` container in the Pod template runs the vLLM image, reads the model from `$(FUSIONINFER_MODEL_PATH)`, which the Operator injects, and serves inference on port 8000, named `http`:
+The following is an example of an Aggregated RuntimeProfile. It uses the vLLM inference engine. The `engine` container in the Pod template runs the vLLM image, reads the model from `$(FUSIONINFER_MODEL_PATH)`, which the Controller injects, and serves inference on port 8000, named `http`:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -172,7 +172,7 @@ spec:
 
 `podTemplate` is a complete [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494). The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader receives inference requests.
 
-The Operator injects the following into the generated Pods, and the template cannot declare these names or paths:
+The Controller injects the following into the generated Pods. A template that declares any of these names or paths is rejected when the Profile is created or updated:
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -200,16 +200,16 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 
 - `backend` is required and must be `vllm` or `sglang`.
 - `lora.loadingMode` must be `preload` or `dynamic`.
-- A Profile can be consumed only when the current Operator version implements the selected LoRA mode for the specified backend and template entrypoint.
+- A Profile can be consumed only when the current FusionInfer version implements the selected LoRA mode for the specified backend and template entrypoint.
 - `aggregated` must be set, or both `prefiller` and `decoder` must be set.
 - Every declared role must provide a `podTemplate`.
 - When `multinode` is set, `nodeCount` must be at least 2; when it is omitted, the role is treated as single-node.
 - `podTemplate` must be a valid `corev1.PodTemplateSpec`; the API server validates it against the Pod schema.
 - The template must contain an `engine` container and exactly one named `http` port.
 - Template `metadata` may contain only labels and annotations.
-- The template's `schedulerName` must be empty or equal to the Volcano scheduler configured by the Operator.
-- The template cannot use Operator-reserved volumes, init containers, environment variables, mount paths, labels, or annotations.
-- The current Operator version must support the image and entrypoint arguments declared in the template.
+- The template's `schedulerName` must be empty or equal to the Volcano scheduler configured for FusionInfer.
+- The template cannot use the volumes, init containers, environment variables, mount paths, labels, or annotations that the Controller injects.
+- The current FusionInfer version must support the image and entrypoint arguments declared in the template.
 - The template cannot declare the executor, address, rank, `nnodes`, headless, or LoRA list parameters that the Controller injects for the backend.
 - The template image must be pinned by OCI digest. For readability, the examples in this document use version tags.
 - `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
@@ -353,7 +353,7 @@ Based on `backend: vllm` and `nodeCount: 4`, the Controller injects the multipro
 
 ### RuntimeProfile: Dynamic LoRA {#runtimeprofile-dynamic-lora}
 
-This Profile loads LoRAs in `dynamic` mode. vLLM's LoRA enablement and backend-specific capacity are fixed in the PodTemplate. The Operator configures the protected Pod-local management endpoint and the environment variables required for runtime updates, while the `InferenceDeployment` Controller reconciles loading state through the backend integration.
+This Profile loads LoRAs in `dynamic` mode. vLLM's LoRA enablement and backend-specific capacity are fixed in the PodTemplate. The `InferenceDeployment` Controller configures the protected Pod-local management endpoint and the environment variables required for runtime updates, and reconciles loading state through the backend integration.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
