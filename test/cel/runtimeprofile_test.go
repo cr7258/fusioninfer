@@ -39,6 +39,8 @@ const (
 	msgPDTogether      = "prefiller and decoder must be set together"
 	msgImmutableSpec   = "spec is immutable"
 	msgPickerAggregate = "endpointPicker can be set only with aggregated"
+	msgKVTransferPD    = "kvTransfer is required with prefiller and decoder"
+	msgKVTransferOnly  = "kvTransfer can be set only with prefiller and decoder"
 )
 
 // runtimeProfileObject returns a RuntimeProfile in the default namespace or a cluster-scoped
@@ -104,12 +106,14 @@ func aggregatedSpec() fusioninferiov1alpha1.RuntimeProfileSpec {
 	}
 }
 
-// disaggregatedSpec returns a vLLM runtime with single-node prefiller and decoder roles.
+// disaggregatedSpec returns a vLLM runtime with single-node prefiller and decoder roles that transfer
+// the KV cache with NIXL.
 func disaggregatedSpec() fusioninferiov1alpha1.RuntimeProfileSpec {
 	return fusioninferiov1alpha1.RuntimeProfileSpec{
-		Backend:   fusioninferiov1alpha1.RuntimeBackendVLLM,
-		Prefiller: engineRole(vllmImage),
-		Decoder:   engineRole(vllmImage),
+		Backend:    fusioninferiov1alpha1.RuntimeBackendVLLM,
+		KVTransfer: &fusioninferiov1alpha1.KVTransferSpec{Connector: fusioninferiov1alpha1.KVConnectorNIXL},
+		Prefiller:  engineRole(vllmImage),
+		Decoder:    engineRole(vllmImage),
 	}
 }
 
@@ -129,6 +133,20 @@ func withEndpointPicker(
 	return spec
 }
 
+// withKVConnector returns spec with a KV transfer through the given connector.
+func withKVConnector(
+	spec fusioninferiov1alpha1.RuntimeProfileSpec, connector fusioninferiov1alpha1.KVConnector,
+) fusioninferiov1alpha1.RuntimeProfileSpec {
+	spec.KVTransfer = &fusioninferiov1alpha1.KVTransferSpec{Connector: connector}
+	return spec
+}
+
+// withoutKVTransfer returns spec without a KV transfer.
+func withoutKVTransfer(spec fusioninferiov1alpha1.RuntimeProfileSpec) fusioninferiov1alpha1.RuntimeProfileSpec {
+	spec.KVTransfer = nil
+	return spec
+}
+
 // TestRuntimeProfileAcceptsSupportedRuntimes checks the valid combinations of backend, roles,
 // multinode and LoRA loading.
 func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
@@ -145,9 +163,10 @@ func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
 			Aggregated: multinodeRole(vllmImage, 4),
 		}},
 		{"multinode prefill/decode", "profile-multinode-pd", fusioninferiov1alpha1.RuntimeProfileSpec{
-			Backend:   fusioninferiov1alpha1.RuntimeBackendSGLang,
-			Prefiller: multinodeRole(sglangImage, 2),
-			Decoder:   engineRole(sglangImage),
+			Backend:    fusioninferiov1alpha1.RuntimeBackendSGLang,
+			KVTransfer: &fusioninferiov1alpha1.KVTransferSpec{Connector: fusioninferiov1alpha1.KVConnectorNIXL},
+			Prefiller:  multinodeRole(sglangImage, 2),
+			Decoder:    engineRole(sglangImage),
 		}},
 		{"preload LoRA", "profile-lora-preload",
 			withLoRA(aggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModePreload)},
@@ -192,6 +211,10 @@ func TestRuntimeProfileRejectsInvalidRoles(t *testing.T) {
 		}, msgAggregatedAndPD},
 		{"endpoint picker with prefiller and decoder", "bad-roles-endpoint-picker",
 			withEndpointPicker(disaggregatedSpec(), fusioninferiov1alpha1.StrategyPrefixCache), msgPickerAggregate},
+		{"prefiller and decoder without kvTransfer", "bad-roles-no-kv-transfer",
+			withoutKVTransfer(disaggregatedSpec()), msgKVTransferPD},
+		{"kvTransfer with aggregated", "bad-roles-kv-transfer",
+			withKVConnector(aggregatedSpec(), fusioninferiov1alpha1.KVConnectorNIXL), msgKVTransferOnly},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -216,6 +239,20 @@ func TestRuntimeProfileLimitsEndpointPickerStrategies(t *testing.T) {
 			object := runtimeProfileObject("RuntimeProfile", "bad-picker-"+string(strategy),
 				withEndpointPicker(aggregatedSpec(), strategy))
 			expectInvalid(t, k8sClient.Create(t.Context(), object), fmt.Sprintf("Unsupported value: %q", strategy))
+		})
+	}
+}
+
+// TestRuntimeProfileLimitsKVConnectors checks that kvTransfer accepts only the connectors that the
+// Controller supports.
+func TestRuntimeProfileLimitsKVConnectors(t *testing.T) {
+	t.Parallel()
+	for _, connector := range []fusioninferiov1alpha1.KVConnector{"mooncake", "lmcache"} {
+		t.Run(string(connector), func(t *testing.T) {
+			t.Parallel()
+			object := runtimeProfileObject("RuntimeProfile", "bad-kv-connector-"+string(connector),
+				withKVConnector(disaggregatedSpec(), connector))
+			expectInvalid(t, k8sClient.Create(t.Context(), object), fmt.Sprintf("Unsupported value: %q", connector))
 		})
 	}
 }
@@ -287,8 +324,7 @@ func TestRuntimeProfileSpecIsImmutable(t *testing.T) {
 					profileSpecOf(object).Aggregated = engineRole("vllm/vllm-openai:v0.28.0")
 				}},
 				{"roles", func(object client.Object) {
-					spec := profileSpecOf(object)
-					spec.Aggregated, spec.Prefiller, spec.Decoder = nil, engineRole(vllmImage), engineRole(vllmImage)
+					*profileSpecOf(object) = disaggregatedSpec()
 				}},
 			}
 			for _, update := range rejected {

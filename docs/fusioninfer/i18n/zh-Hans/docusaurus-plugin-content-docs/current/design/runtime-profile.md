@@ -5,7 +5,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 ## 概述 {#overview}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署、Aggregated 或 Prefill/Decode 角色，以及默认的 Endpoint Picker 策略。两者只有作用范围不同：
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署、Aggregated 或 Prefill/Decode 角色、默认的 Endpoint Picker 策略，以及 P/D 的 KV 传输方式。两者只有作用范围不同：
 
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
@@ -56,6 +56,7 @@ type RuntimeProfileSpec struct {
     Backend        RuntimeBackend        `json:"backend"`
     LoRA           *RuntimeLoRASpec      `json:"lora,omitempty"`
     EndpointPicker *EndpointPickerSpec   `json:"endpointPicker,omitempty"`
+    KVTransfer     *KVTransferSpec       `json:"kvTransfer,omitempty"`
     Aggregated     *RuntimeComponentSpec `json:"aggregated,omitempty"`
     Prefiller      *RuntimeComponentSpec `json:"prefiller,omitempty"`
     Decoder        *RuntimeComponentSpec `json:"decoder,omitempty"`
@@ -80,6 +81,19 @@ type EndpointPickerSpec struct {
     // 复用现有的 v1alpha1 RoutingStrategy 类型，只允许以下三种取值。
     // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
     Strategy RoutingStrategy `json:"strategy"`
+}
+
+// KVConnector 是把 KV cache 从 Prefiller 传到 Decoder 的 connector。
+// +kubebuilder:validation:Enum=nixl
+type KVConnector string
+
+const (
+    KVConnectorNIXL KVConnector = "nixl"
+)
+
+// KVTransferSpec 声明 Prefiller 如何把 KV cache 传给 Decoder。
+type KVTransferSpec struct {
+    Connector KVConnector `json:"connector"`
 }
 
 // RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
@@ -198,18 +212,76 @@ spec:
       # 省略
 ```
 
-InferenceDeployment 可以用 `spec.endpoint.endpointPicker` 覆盖这个默认值；两边都没有设置时，使用 FusionInfer 配置的默认策略。只有 Aggregated 的 Profile 可以设置这个字段，P/D 部署的调度配置由 Controller 根据 Prefiller 和 Decoder 自动生成。
+InferenceDeployment 可以用 `spec.endpoint.endpointPicker` 覆盖这个默认值；两边都没有设置时，使用 FusionInfer 配置的默认策略。只有 Aggregated 的 Profile 可以设置这个字段，P/D 部署的调度配置由 Controller 根据 Prefiller、Decoder 和 [KV 传输方式](#kv-transfer)自动生成。
+
+### KV 传输 {#kv-transfer}
+
+`spec.kvTransfer.connector` 声明 Prefiller 用哪种 connector 把 KV cache 传给 Decoder。P/D 的 Profile 必须设置这个字段，Aggregated 的 Profile 不能设置。目前只支持 `nixl`：
+
+```yaml
+spec:
+  backend: vllm
+  kvTransfer:
+    connector: nixl
+  prefiller:
+    podTemplate:
+      # 省略
+  decoder:
+    podTemplate:
+      # 省略
+```
+
+这个字段决定 Controller 怎么配置路由、注入什么；推理引擎的 connector 仍然在模板中配置，两边要一致：
+
+| backend | 模板中的写法 | Controller 的处理 |
+| --- | --- | --- |
+| `vllm` | `--kv-transfer-config` 使用 `NixlConnector` | 注入 `VLLM_NIXL_SIDE_CHANNEL_HOST`；路由把 Prefill 返回的传输参数转给 Decode |
+| `sglang` | 写明 `--disaggregation-transfer-backend nixl`，因为 SGLang 默认使用 Mooncake | 路由在请求中带上 Prefill 的地址和 bootstrap 端口 |
+
+vLLM 需要用 LMCache 卸载和复用 KV cache 时，可以用 MultiConnector 把 `NixlConnector` 和 `LMCacheConnectorV1` 组合起来，`connector` 仍然写 `nixl`。这时 `--kv-transfer-config` 的值是：
+
+```json
+{
+  "kv_connector": "MultiConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "connectors": [
+      {"kv_connector": "NixlConnector", "kv_role": "kv_both"},
+      {"kv_connector": "LMCacheConnectorV1", "kv_role": "kv_both"}
+    ]
+  }
+}
+```
+
+SGLang 的 bootstrap 端口默认是 8998。Prefiller 用 `--disaggregation-bootstrap-port` 改了端口时，要在 `engine` 容器中用命名端口 `bootstrap` 声明同一个端口，Controller 据此配置路由：
+
+```yaml
+prefiller:
+  podTemplate:
+    spec:
+      containers:
+        - name: engine
+          args:
+            # 省略其他参数
+            - --disaggregation-bootstrap-port
+            - "30001"
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: bootstrap
+              containerPort: 30001
+```
 
 ### Pod 模板 {#podtemplate}
 
-`podTemplate` 是完整的 [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494)。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 接收推理请求。
+`podTemplate` 是完整的 [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494)。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 接收推理请求。SGLang P/D 的 Prefiller 还可以用命名端口 `bootstrap` 声明 bootstrap 端口，见 [KV 传输](#kv-transfer)。
 
 Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径，否则创建或更新 Profile 时会被拒绝：
 
 | 类型 | 名称 | 说明 |
 | --- | --- | --- |
 | 环境变量 | `FUSIONINFER_MODEL_PATH` | 值为模型目录 `/models`。启动命令应通过 `$(FUSIONINFER_MODEL_PATH)` 读取模型 |
-| 环境变量 | `VLLM_NIXL_SIDE_CHANNEL_HOST` | 只在 vLLM 的 P/D 角色中注入，值为本 Pod 的 IP，供 NixlConnector 完成 Prefiller 和 Decoder 之间的握手 |
+| 环境变量 | `VLLM_NIXL_SIDE_CHANNEL_HOST` | `kvTransfer.connector` 为 `nixl` 时，注入 vLLM 的 P/D 角色，值为本 Pod 的 IP，供 NixlConnector 完成 Prefiller 和 Decoder 之间的握手 |
 | Volume | `fusioninfer-model` | 只读挂载模型目录 `/models` |
 | Volume | `fusioninfer-lora` | 只读挂载 LoRA 目录 `/adapters`，只包含当前 Deployment 绑定的 LoRA |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
@@ -275,7 +347,7 @@ spec:
 
 ### ClusterRuntimeProfile：vLLM P/D 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。握手需要的 `VLLM_NIXL_SIDE_CHANNEL_HOST` 由 Controller 注入，模板里不用写。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
+下面的例子用 vLLM 运行 P/D 分离：`kvTransfer.connector` 为 `nixl`，两个角色的 `--kv-transfer-config` 都使用 `NixlConnector`，`kv_role` 都是 `kv_both`；握手需要的 `VLLM_NIXL_SIDE_CHANNEL_HOST` 由 Controller 注入，模板里不用写。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -284,6 +356,8 @@ metadata:
   name: vllm-pd-h100-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:
@@ -326,7 +400,7 @@ spec:
 
 ### ClusterRuntimeProfile：SGLang P/D 分离 {#clusterruntimeprofile-sglang-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 分别用 `--disaggregation-mode prefill` 和 `--disaggregation-mode decode` 启动，示例用 NIXL 传输 KV cache，和上面的 vLLM 示例一致。SGLang 不需要注入 `VLLM_NIXL_SIDE_CHANNEL_HOST` 这类地址：路由层在每个请求里带上选中的 Prefill Pod 的地址，Decoder 据此连到 Prefill 的 bootstrap 端口（默认 8998）。两个角色都要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+下面的例子用 SGLang 运行 P/D 分离，Prefiller 和 Decoder 分别用 `--disaggregation-mode prefill` 和 `--disaggregation-mode decode` 启动。`kvTransfer.connector` 为 `nixl`，两个角色都写明 `--disaggregation-transfer-backend nixl`。SGLang 不需要注入 `VLLM_NIXL_SIDE_CHANNEL_HOST` 这类地址：路由在每个请求里带上选中的 Prefill Pod 的地址，Decoder 据此连到 Prefill 的 bootstrap 端口。示例使用默认的 8998 端口，所以没有声明 `bootstrap` 端口。两个角色都要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -335,6 +409,8 @@ metadata:
   name: sglang-pd-h100-r1
 spec:
   backend: sglang
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:

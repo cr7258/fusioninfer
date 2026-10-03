@@ -25,8 +25,9 @@ import (
 // with apply.
 //
 // RuntimeProfileSpec declares a reusable inference runtime: the backend, the LoRA loading
-// capability, the default Endpoint Picker, and either an aggregated role or a prefiller and a decoder. It describes one
-// logical replica per role and neither sets replica counts nor references a Model.
+// capability, and either an aggregated role with its default Endpoint Picker or a prefiller and a
+// decoder with their KV transfer. It describes one logical replica per role and neither sets replica
+// counts nor references a Model.
 type RuntimeProfileSpecApplyConfiguration struct {
 	// Backend selects the inference engine adapter. All roles use the same backend.
 	Backend *corev1alpha1.RuntimeBackend `json:"backend,omitempty"`
@@ -36,6 +37,9 @@ type RuntimeProfileSpecApplyConfiguration struct {
 	// EndpointPicker declares the default Endpoint Picker of the InferenceDeployments that use this
 	// runtime; an InferenceDeployment can override it. Only an aggregated runtime can set it.
 	EndpointPicker *EndpointPickerSpecApplyConfiguration `json:"endpointPicker,omitempty"`
+	// KVTransfer declares how the prefiller transfers the KV cache to the decoder. A runtime with a
+	// prefiller and a decoder must set it, and an aggregated runtime cannot.
+	KVTransfer *KVTransferSpecApplyConfiguration `json:"kvTransfer,omitempty"`
 	// Aggregated declares the role of aggregated inference, where each replica runs both prefill and decode.
 	Aggregated *RuntimeComponentSpecApplyConfiguration `json:"aggregated,omitempty"`
 	// Prefiller declares the prefill role of Prefill/Decode disaggregation.
@@ -71,6 +75,14 @@ func (b *RuntimeProfileSpecApplyConfiguration) WithLoRA(value *RuntimeLoRASpecAp
 // If called multiple times, the EndpointPicker field is set to the value of the last call.
 func (b *RuntimeProfileSpecApplyConfiguration) WithEndpointPicker(value *EndpointPickerSpecApplyConfiguration) *RuntimeProfileSpecApplyConfiguration {
 	b.EndpointPicker = value
+	return b
+}
+
+// WithKVTransfer sets the KVTransfer field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the KVTransfer field is set to the value of the last call.
+func (b *RuntimeProfileSpecApplyConfiguration) WithKVTransfer(value *KVTransferSpecApplyConfiguration) *RuntimeProfileSpecApplyConfiguration {
+	b.KVTransfer = value
 	return b
 }
 

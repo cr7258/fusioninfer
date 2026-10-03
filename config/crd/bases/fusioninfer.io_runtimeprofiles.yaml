@@ -17245,6 +17245,21 @@ spec:
                 required:
                 - strategy
                 type: object
+              kvTransfer:
+                description: |-
+                  KVTransfer declares how the prefiller transfers the KV cache to the decoder. A runtime with a
+                  prefiller and a decoder must set it, and an aggregated runtime cannot.
+                properties:
+                  connector:
+                    description: |-
+                      Connector is the KV connector that the inference engines of both roles are configured with.
+                      The Controller derives the routing protocol and the settings it injects from it.
+                    enum:
+                    - nixl
+                    type: string
+                required:
+                - connector
+                type: object
               lora:
                 description: |-
                   LoRA declares that the runtime can serve LoRA adapters and how it loads them.
@@ -25861,6 +25876,10 @@ spec:
               rule: has(self.prefiller) == has(self.decoder)
             - message: endpointPicker can be set only with aggregated
               rule: '!has(self.endpointPicker) || has(self.aggregated)'
+            - message: kvTransfer is required with prefiller and decoder
+              rule: '!has(self.prefiller) || has(self.kvTransfer)'
+            - message: kvTransfer can be set only with prefiller and decoder
+              rule: '!has(self.kvTransfer) || has(self.prefiller)'
         required:
         - spec
         type: object

@@ -46,14 +46,26 @@ const (
 	LoRALoadingModeDynamic LoRALoadingMode = "dynamic"
 )
 
+// KVConnector is the connector that transfers the KV cache from the prefiller to the decoder.
+// +kubebuilder:validation:Enum=nixl
+type KVConnector string
+
+const (
+	// KVConnectorNIXL transfers the KV cache with NIXL.
+	KVConnectorNIXL KVConnector = "nixl"
+)
+
 // RuntimeProfileSpec declares a reusable inference runtime: the backend, the LoRA loading
-// capability, the default Endpoint Picker, and either an aggregated role or a prefiller and a decoder. It describes one
-// logical replica per role and neither sets replica counts nor references a Model.
+// capability, and either an aggregated role with its default Endpoint Picker or a prefiller and a
+// decoder with their KV transfer. It describes one logical replica per role and neither sets replica
+// counts nor references a Model.
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 // +kubebuilder:validation:XValidation:rule="has(self.aggregated) || has(self.prefiller) || has(self.decoder)",message="set aggregated, or prefiller and decoder"
 // +kubebuilder:validation:XValidation:rule="!has(self.aggregated) || (!has(self.prefiller) && !has(self.decoder))",message="aggregated cannot be combined with prefiller or decoder"
 // +kubebuilder:validation:XValidation:rule="has(self.prefiller) == has(self.decoder)",message="prefiller and decoder must be set together"
 // +kubebuilder:validation:XValidation:rule="!has(self.endpointPicker) || has(self.aggregated)",message="endpointPicker can be set only with aggregated"
+// +kubebuilder:validation:XValidation:rule="!has(self.prefiller) || has(self.kvTransfer)",message="kvTransfer is required with prefiller and decoder"
+// +kubebuilder:validation:XValidation:rule="!has(self.kvTransfer) || has(self.prefiller)",message="kvTransfer can be set only with prefiller and decoder"
 type RuntimeProfileSpec struct {
 	// Backend selects the inference engine adapter. All roles use the same backend.
 	// +required
@@ -68,6 +80,11 @@ type RuntimeProfileSpec struct {
 	// runtime; an InferenceDeployment can override it. Only an aggregated runtime can set it.
 	// +optional
 	EndpointPicker *EndpointPickerSpec `json:"endpointPicker,omitempty"`
+
+	// KVTransfer declares how the prefiller transfers the KV cache to the decoder. A runtime with a
+	// prefiller and a decoder must set it, and an aggregated runtime cannot.
+	// +optional
+	KVTransfer *KVTransferSpec `json:"kvTransfer,omitempty"`
 
 	// Aggregated declares the role of aggregated inference, where each replica runs both prefill and decode.
 	// +optional
@@ -96,6 +113,14 @@ type EndpointPickerSpec struct {
 	// +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
 	// +required
 	Strategy RoutingStrategy `json:"strategy"`
+}
+
+// KVTransferSpec declares how the prefiller transfers the KV cache to the decoder.
+type KVTransferSpec struct {
+	// Connector is the KV connector that the inference engines of both roles are configured with.
+	// The Controller derives the routing protocol and the settings it injects from it.
+	// +required
+	Connector KVConnector `json:"connector"`
 }
 
 // RuntimeComponentSpec declares one role of a runtime: the Pod template of a logical replica and,

@@ -5,7 +5,7 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 
 ## Overview {#overview}
 
-`RuntimeProfile` and `ClusterRuntimeProfile` declare reusable inference runtime templates, including the inference engine (`backend`), the inference image and startup arguments, how LoRA adapters are loaded, single-node or multinode deployment, the Aggregated or Prefill/Decode roles, and the default Endpoint Picker strategy. They differ only in scope:
+`RuntimeProfile` and `ClusterRuntimeProfile` declare reusable inference runtime templates, including the inference engine (`backend`), the inference image and startup arguments, how LoRA adapters are loaded, single-node or multinode deployment, the Aggregated or Prefill/Decode roles, the default Endpoint Picker strategy, and how a P/D runtime transfers the KV cache. They differ only in scope:
 
 - `RuntimeProfile` is a namespaced resource that can be reused within a Namespace.
 - `ClusterRuntimeProfile` is a cluster-scoped resource that can be shared across Namespaces.
@@ -56,6 +56,7 @@ type RuntimeProfileSpec struct {
     Backend        RuntimeBackend        `json:"backend"`
     LoRA           *RuntimeLoRASpec      `json:"lora,omitempty"`
     EndpointPicker *EndpointPickerSpec   `json:"endpointPicker,omitempty"`
+    KVTransfer     *KVTransferSpec       `json:"kvTransfer,omitempty"`
     Aggregated     *RuntimeComponentSpec `json:"aggregated,omitempty"`
     Prefiller      *RuntimeComponentSpec `json:"prefiller,omitempty"`
     Decoder        *RuntimeComponentSpec `json:"decoder,omitempty"`
@@ -80,6 +81,19 @@ type EndpointPickerSpec struct {
     // Reuses the existing v1alpha1 RoutingStrategy type and allows only these three values.
     // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
     Strategy RoutingStrategy `json:"strategy"`
+}
+
+// KVConnector is the connector that transfers the KV cache from the Prefiller to the Decoder.
+// +kubebuilder:validation:Enum=nixl
+type KVConnector string
+
+const (
+    KVConnectorNIXL KVConnector = "nixl"
+)
+
+// KVTransferSpec declares how the Prefiller transfers the KV cache to the Decoder.
+type KVTransferSpec struct {
+    Connector KVConnector `json:"connector"`
 }
 
 // RuntimeComponentSpec declares one role: the Pod template of a logical replica and whether the replica spans several nodes.
@@ -198,18 +212,76 @@ spec:
       # omitted
 ```
 
-An InferenceDeployment can override this default with `spec.endpoint.endpointPicker`; when neither sets it, the default strategy configured for FusionInfer applies. Only an Aggregated Profile can set this field; for a P/D deployment, the Controller generates the scheduling configuration from the Prefiller and Decoder.
+An InferenceDeployment can override this default with `spec.endpoint.endpointPicker`; when neither sets it, the default strategy configured for FusionInfer applies. Only an Aggregated Profile can set this field; for a P/D deployment, the Controller generates the scheduling configuration from the Prefiller, the Decoder and the [KV transfer](#kv-transfer).
+
+### KV Transfer {#kv-transfer}
+
+`spec.kvTransfer.connector` declares the connector that the Prefiller uses to transfer the KV cache to the Decoder. A P/D Profile must set this field, and an Aggregated Profile cannot. Only `nixl` is supported for now:
+
+```yaml
+spec:
+  backend: vllm
+  kvTransfer:
+    connector: nixl
+  prefiller:
+    podTemplate:
+      # omitted
+  decoder:
+    podTemplate:
+      # omitted
+```
+
+The field decides how the Controller configures routing and what it injects; the connector of the inference engine is still configured in the template, and the two must match:
+
+| backend | In the template | What the Controller does |
+| --- | --- | --- |
+| `vllm` | `--kv-transfer-config` uses `NixlConnector` | Injects `VLLM_NIXL_SIDE_CHANNEL_HOST`; routing passes the transfer parameters that the Prefill returns on to the Decode |
+| `sglang` | Sets `--disaggregation-transfer-backend nixl` explicitly, because SGLang uses Mooncake by default | Routing puts the Prefill address and bootstrap port into each request |
+
+When vLLM needs LMCache to offload and reuse the KV cache, MultiConnector can combine `NixlConnector` with `LMCacheConnectorV1`, and `connector` stays `nixl`. The value of `--kv-transfer-config` is then:
+
+```json
+{
+  "kv_connector": "MultiConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "connectors": [
+      {"kv_connector": "NixlConnector", "kv_role": "kv_both"},
+      {"kv_connector": "LMCacheConnectorV1", "kv_role": "kv_both"}
+    ]
+  }
+}
+```
+
+The SGLang bootstrap port is 8998 by default. When the Prefiller changes it with `--disaggregation-bootstrap-port`, the `engine` container declares the same port as the named port `bootstrap`, and the Controller configures routing from it:
+
+```yaml
+prefiller:
+  podTemplate:
+    spec:
+      containers:
+        - name: engine
+          args:
+            # other arguments omitted
+            - --disaggregation-bootstrap-port
+            - "30001"
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: bootstrap
+              containerPort: 30001
+```
 
 ### PodTemplate {#podtemplate}
 
-`podTemplate` is a complete [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494). The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader receives inference requests.
+`podTemplate` is a complete [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494). The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader receives inference requests. The Prefiller of an SGLang P/D runtime can also declare its bootstrap port as the named port `bootstrap`; see [KV Transfer](#kv-transfer).
 
 The Controller injects the following into the generated Pods. A template that declares any of these names or paths is rejected when the Profile is created or updated:
 
 | Type | Name | Description |
 | --- | --- | --- |
 | Environment variable | `FUSIONINFER_MODEL_PATH` | Set to the Model directory `/models`. Startup commands should read the Model through `$(FUSIONINFER_MODEL_PATH)` |
-| Environment variable | `VLLM_NIXL_SIDE_CHANNEL_HOST` | Injected only into the roles of a vLLM P/D runtime and set to the Pod IP, so that NixlConnector can complete the handshake between the Prefiller and Decoder |
+| Environment variable | `VLLM_NIXL_SIDE_CHANNEL_HOST` | Injected into the roles of a vLLM P/D runtime when `kvTransfer.connector` is `nixl`, and set to the Pod IP, so that NixlConnector can complete the handshake between the Prefiller and Decoder |
 | Volume | `fusioninfer-model` | Mounts the Model directory `/models` read-only |
 | Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` read-only, with only the LoRAs bound to the current Deployment |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
@@ -275,7 +347,7 @@ spec:
 
 ### ClusterRuntimeProfile: vLLM P/D Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. The Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, which the handshake needs, so the template does not set it. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
+The following example runs vLLM with P/D disaggregation: `kvTransfer.connector` is `nixl`, the `--kv-transfer-config` of both roles uses `NixlConnector`, and `kv_role` is `kv_both` on each side; the Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, which the handshake needs, so the template does not set it. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -284,6 +356,8 @@ metadata:
   name: vllm-pd-h100-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:
@@ -326,7 +400,7 @@ spec:
 
 ### ClusterRuntimeProfile: SGLang P/D Disaggregation {#clusterruntimeprofile-sglang-prefilldecode-disaggregation}
 
-The Prefiller and Decoder start with `--disaggregation-mode prefill` and `--disaggregation-mode decode`, and the example transfers the KV cache through NIXL, like the vLLM example above. SGLang needs no injected address such as `VLLM_NIXL_SIDE_CHANNEL_HOST`: the routing layer puts the address of the chosen Prefill Pod into each request, and the Decoder uses it to connect to the Prefill bootstrap port (8998 by default). Both roles set `--host 0.0.0.0` and `--port 8000` to match the `http` port.
+The following example runs SGLang with P/D disaggregation, starting the Prefiller and Decoder with `--disaggregation-mode prefill` and `--disaggregation-mode decode`. `kvTransfer.connector` is `nixl`, and both roles set `--disaggregation-transfer-backend nixl`. SGLang needs no injected address such as `VLLM_NIXL_SIDE_CHANNEL_HOST`: routing puts the address of the chosen Prefill Pod into each request, and the Decoder uses it to connect to the Prefill bootstrap port. The example uses the default port 8998, so it declares no `bootstrap` port. Both roles set `--host 0.0.0.0` and `--port 8000` to match the `http` port.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -335,6 +409,8 @@ metadata:
   name: sglang-pd-h100-r1
 spec:
   backend: sglang
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:

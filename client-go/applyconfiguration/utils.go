@@ -45,6 +45,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1alpha1.InferenceServiceSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceServiceStatus"):
 		return &corev1alpha1.InferenceServiceStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("KVTransferSpec"):
+		return &corev1alpha1.KVTransferSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("LoRAArtifactSpec"):
 		return &corev1alpha1.LoRAArtifactSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Model"):

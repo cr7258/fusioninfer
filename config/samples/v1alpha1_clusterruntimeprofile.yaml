@@ -7,6 +7,8 @@ metadata:
   name: vllm-pd-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:
