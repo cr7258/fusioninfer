@@ -183,7 +183,16 @@ The Controller injects the following into the generated Pods. A template that de
 
 The Controller injects `fusioninfer-lora` only when the InferenceDeployment binds LoRAs, and hands the LoRAs to the inference engine according to the loading mode:
 
-- `preload`: it writes the bound LoRAs into the startup arguments, and the inference engine loads them at startup. For vLLM, it adds `--lora-modules finance=/adapters/...` with one entry per LoRA: the left side is the model name that requests use to select the LoRA, and the right side is its path under `/adapters`.
+- `preload`: it writes the bound LoRAs into the startup arguments, and the inference engine loads them at startup. For example, when the InferenceDeployment binds the `finance` and `customer-support` LoRAs, the Controller appends the following to the vLLM arguments:
+
+  ```bash
+  --lora-modules \
+    finance=/adapters/qwen3-8b-finance-lora-r1 \
+    customer-support=/adapters/qwen3-8b-support-lora-r1
+  ```
+
+  Each LoRA gets one entry: the left side is the model name that requests use to select the LoRA, and the right side is its path under `/adapters`.
+
 - `dynamic`: it turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM; once the Pod is running, the Controller calls that API to load and unload LoRAs.
 
 ### Scope and References {#scope-and-references}

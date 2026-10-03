@@ -183,7 +183,16 @@ Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再�
 
 InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lora`，并按加载方式把 LoRA 交给推理引擎：
 
-- `preload`：把绑定的 LoRA 写进启动参数，推理引擎启动时加载。例如 vLLM 会加上 `--lora-modules finance=/adapters/...`，每个 LoRA 一项，等号左边是请求中选择该 LoRA 用的模型名，右边是它在 `/adapters` 下的路径。
+- `preload`：把绑定的 LoRA 写进启动参数，推理引擎启动时加载。例如 InferenceDeployment 绑定了 `finance` 和 `customer-support` 两个 LoRA 时，Controller 会在 vLLM 的启动参数后面追加：
+
+  ```bash
+  --lora-modules \
+    finance=/adapters/qwen3-8b-finance-lora-r1 \
+    customer-support=/adapters/qwen3-8b-support-lora-r1
+  ```
+
+  每个 LoRA 一项，等号左边是请求中选择该 LoRA 用的模型名，右边是它在 `/adapters` 下的路径。
+
 - `dynamic`：开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`；Pod 运行后，Controller 调用这个接口加载和卸载 LoRA。
 
 ### 作用域与引用 {#scope-and-references}
