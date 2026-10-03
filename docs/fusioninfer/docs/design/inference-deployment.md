@@ -135,7 +135,7 @@ After resolving a LoRA, the Controller must confirm that its `baseModelRef` and 
 The referenced RuntimeProfile must declare `spec.lora`:
 
 - `loadingMode: preload`: The Controller materializes all LoRAs before creating a workload revision and passes the binding manifest to the backend startup integration. Adding, deleting, or replacing a binding creates a new workload revision.
-- `loadingMode: dynamic`: The Controller reconciles loading and unloading against the existing Base Model workload without restarting it. Adding, deleting, or replacing a binding updates only the LoRA binding revision. The Pod-local LoRA management endpoint performs only idempotent load, unload, and list operations, and its port is not added to the inference Service, InferencePool, or HTTPRoute.
+- `loadingMode: dynamic`: The Controller reconciles loading and unloading against the existing Base Model workload without restarting it. Adding, deleting, or replacing a binding updates only the LoRA binding revision. The Pod-local LoRA management endpoint performs only idempotent load, unload, and list operations, and its port is not added to the inference Service, InferencePool, or HTTPRoute. If the backend's native interface does not meet this contract, the Operator injects a thin stateless proxy that provides it.
 
 In P/D mode, each binding must be loaded into every Prefiller and Decoder logical replica. Through the backend integration, the Controller calls the Pod-local LoRA management endpoint of each logical replica; the backend can have the Leader coordinate loading within the group, or the integration can fan out to all members. A replica counts as Ready only after its Leader and all Workers confirm that the target digest is loaded.
 

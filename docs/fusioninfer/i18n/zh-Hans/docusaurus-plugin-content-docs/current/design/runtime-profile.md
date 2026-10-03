@@ -170,42 +170,20 @@ spec:
 
 ### Pod 模板 {#podtemplate}
 
-Pod 模板是完整的 `corev1.PodTemplateSpec`，但只允许一层模板：
+`podTemplate` 是完整的 `corev1.PodTemplateSpec`，InferenceDeployment 不能再覆盖其中的字段。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 注册为服务 Endpoint。
 
-- 每个角色的 `podTemplate` 必须包含名为 `engine` 的容器。
-- `engine` 必须声明唯一的命名端口 `http`；多节点模式只把 Leader 注册为服务 Endpoint。
-- 所有 Pod 使用 Operator 配置的 Volcano scheduler；模板中的 `schedulerName` 必须为空或与该配置一致。
-- 同一份模板的 metadata、容器、资源和调度约束应用于 Leader 与 Worker，Controller 只按角色调整启动配置和保留环境变量。
-- `InferenceDeployment` 不提供第二层 Pod override。
-- 模板 `metadata` 只允许设置 labels 和 annotations；资源名称、Namespace、OwnerReference、finalizer 和其他服务端元数据由 Controller 管理。
-- 配置 `lora` 时，模板入口必须符合对应 backend 的 LoRA 契约。Profile 负责声明推理引擎的 LoRA enablement、rank 和 backend-specific 容量参数；Deployment 不能覆盖这些参数。
-- 动态模式所需的管理端口、volume、mount 和环境变量由 Operator 注入，模板不能占用这些保留名称。只有 backend 原生接口不能满足内部 lifecycle 契约时才注入薄的无状态代理；该代理不持有期望状态，也不执行独立调和。
+Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径：
 
-Operator 在所有 `engine` 容器中提供统一的模型挂载契约：
+| 类型 | 名称 | 说明 |
+| --- | --- | --- |
+| 环境变量 | `FUSION_MODEL_PATH` | 模型目录 `/models`，只读挂载。启动命令应通过 `$(FUSION_MODEL_PATH)` 读取模型 |
+| 环境变量 | `FUSION_MODEL_METADATA_PATH` | 模型元数据文件 `/var/run/fusioninfer/model/model.json` |
+| 环境变量 | `FUSION_LORA_ROOT` | LoRA 目录 `/adapters`，只读挂载，只包含当前 Deployment 绑定的 LoRA |
+| 环境变量 | `FUSION_LORA_MANIFEST` | LoRA 清单 `/var/run/fusioninfer/lora/adapters.json`，记录每个 `servedName` 对应的 LoRA 路径 |
+| Volume | `fusioninfer-model`、`fusioninfer-model-metadata`、`fusioninfer-lora` | 挂载上面的目录和文件 |
+| Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
-```text
-volume: fusioninfer-model
-volume: fusioninfer-model-metadata
-initContainer: fusioninfer-model-init
-env: FUSION_MODEL_PATH
-env: FUSION_MODEL_METADATA_PATH
-volume: fusioninfer-lora
-env: FUSION_LORA_ROOT
-env: FUSION_LORA_MANIFEST
-```
-
-模型内容以只读方式挂载到固定路径 `/models`，并注入：
-
-```text
-FUSION_MODEL_PATH=/models
-FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
-```
-
-Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存根目录。Profile 不能声明上述保留字段，也不能覆盖 Operator 管理的模型下载组件或 Endpoint Picker 镜像。
-
-声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。`engine` 容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
-
-生产环境中的推理镜像必须使用 OCI digest 固定。以下示例使用官方版本化镜像 `vllm/vllm-openai:v0.27.1` 以保持可读性，部署时需要替换为对应版本的 digest-pinned 镜像。
+LoRA 相关的内容只在 InferenceDeployment 声明了 LoRA 绑定时注入；`dynamic` 模式还会注入加载和卸载 LoRA 所需的管理端口和环境变量。
 
 ### 作用域与引用 {#scope-and-references}
 
@@ -230,10 +208,12 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - 设置 `multinode` 时，`nodeCount` 必须大于等于 2；省略时按单节点处理。
 - `podTemplate` 必须是合法的 `corev1.PodTemplateSpec`，由 API server 按 Pod schema 校验。
 - 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
+- 模板 `metadata` 只能设置 labels 和 annotations。
+- 模板中的 `schedulerName` 必须为空或等于 Operator 配置的 Volcano scheduler。
 - 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
 - 当前 Operator 版本必须支持模板中声明的镜像和入口参数。
 - 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes` 或 headless 参数。
-- 模板镜像必须使用 OCI digest 固定。
+- 模板镜像必须使用 OCI digest 固定。本文示例为了便于阅读使用版本 tag。
 - `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
 
 ## Status {#status}

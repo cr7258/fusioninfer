@@ -170,42 +170,20 @@ spec:
 
 ### PodTemplate {#podtemplate}
 
-The PodTemplate is a complete `corev1.PodTemplateSpec`, but only one template layer is allowed:
+`podTemplate` is a complete `corev1.PodTemplateSpec`, and an InferenceDeployment cannot override its fields. The inference engine runs in the container named `engine` and serves through the named port `http`; in multinode mode, only the Leader is registered as a service Endpoint.
 
-- Each role's `podTemplate` must contain a container named `engine`.
-- `engine` must declare exactly one named port called `http`; in multinode mode, only the Leader is registered as a service Endpoint.
-- All Pods use the Volcano scheduler configured by the Operator. The template's `schedulerName` must be empty or match that configuration.
-- The metadata, containers, resources, and scheduling constraints from the same template apply to the Leader and Workers; the Controller adjusts only the startup configuration and reserved environment variables per role.
-- `InferenceDeployment` does not provide a second layer of Pod overrides.
-- Template `metadata` may contain only labels and annotations. Resource names, Namespace, OwnerReference, finalizers, and other server-side metadata are managed by the Controller.
-- When `lora` is configured, the template entrypoint must conform to the LoRA contract for the corresponding backend. The Profile declares the inference engine's LoRA enablement, rank, and backend-specific capacity parameters; the Deployment cannot override them.
-- The Operator injects the management port, volume, mount, and environment variables required by dynamic mode, and the template cannot use these reserved names. A thin stateless proxy is injected only when the backend's native interface cannot satisfy the internal lifecycle contract; the proxy does not own desired state or perform independent reconciliation.
+The Operator injects the following into the generated Pods, and the template cannot declare these names or paths:
 
-The Operator provides a uniform Model mount contract in every `engine` container:
+| Type | Name | Description |
+| --- | --- | --- |
+| Environment variable | `FUSION_MODEL_PATH` | The Model directory `/models`, mounted read-only. Startup commands should read the Model through `$(FUSION_MODEL_PATH)` |
+| Environment variable | `FUSION_MODEL_METADATA_PATH` | The Model metadata file `/var/run/fusioninfer/model/model.json` |
+| Environment variable | `FUSION_LORA_ROOT` | The LoRA directory `/adapters`, mounted read-only, with only the LoRAs bound to the current Deployment |
+| Environment variable | `FUSION_LORA_MANIFEST` | The LoRA manifest `/var/run/fusioninfer/lora/adapters.json`, which maps each `servedName` to its LoRA path |
+| Volume | `fusioninfer-model`, `fusioninfer-model-metadata`, `fusioninfer-lora` | Mount the directories and files above |
+| Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
 
-```text
-volume: fusioninfer-model
-volume: fusioninfer-model-metadata
-initContainer: fusioninfer-model-init
-env: FUSION_MODEL_PATH
-env: FUSION_MODEL_METADATA_PATH
-volume: fusioninfer-lora
-env: FUSION_LORA_ROOT
-env: FUSION_LORA_MANIFEST
-```
-
-Model content is mounted read-only at the fixed path `/models`, and the following values are injected:
-
-```text
-FUSION_MODEL_PATH=/models
-FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
-```
-
-Runtime commands should read the Model through `$(FUSION_MODEL_PATH)` rather than hard-coding the cache root. A Profile cannot declare the reserved fields above or override the materializer or Endpoint Picker images managed by the Operator.
-
-When LoRA bindings are declared, the Operator also mounts the current Deployment's adapter projection read-only at `/adapters` and generates `/var/run/fusioninfer/lora/adapters.json`. The Manifest uses an internal binding key to map `servedName`, the resolved Model UID, the digest, and the in-container path; paths do not directly use the user-provided served name. The `engine` container can see only the LoRAs bound to the current Deployment and cannot browse the node cache root.
-
-Inference images in production must be pinned by OCI digest. For readability, the following examples use the official versioned image `vllm/vllm-openai:v0.27.1`; replace it with the corresponding digest-pinned image when deploying.
+The LoRA entries are injected only when the InferenceDeployment declares LoRA bindings; `dynamic` mode also injects the management port and environment variables for loading and unloading LoRAs.
 
 ### Scope and References {#scope-and-references}
 
@@ -230,10 +208,12 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 - When `multinode` is set, `nodeCount` must be at least 2; when it is omitted, the role is treated as single-node.
 - `podTemplate` must be a valid `corev1.PodTemplateSpec`; the API server validates it against the Pod schema.
 - The template must contain an `engine` container and exactly one named `http` port.
+- Template `metadata` may contain only labels and annotations.
+- The template's `schedulerName` must be empty or equal to the Volcano scheduler configured by the Operator.
 - The template cannot use Operator-reserved volumes, init containers, environment variables, mount paths, labels, or annotations.
 - The current Operator version must support the image and entrypoint arguments declared in the template.
 - The template cannot declare the executor, address, rank, `nnodes`, or headless parameters that the Controller injects for the backend.
-- The template image must be pinned by OCI digest.
+- The template image must be pinned by OCI digest. For readability, the examples in this document use version tags.
 - `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
 
 ## Status {#status}

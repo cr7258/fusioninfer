@@ -135,7 +135,7 @@ Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `mod
 引用的 RuntimeProfile 必须声明 `spec.lora`：
 
 - `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并把绑定清单交给 backend 的启动集成。增加、删除或替换绑定会创建新的 workload revision。
-- `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。Pod-local LoRA management endpoint 只执行幂等的 load、unload 和 list，其端口不加入推理 Service、InferencePool 或 HTTPRoute。
+- `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。Pod-local LoRA management endpoint 只执行幂等的 load、unload 和 list，其端口不加入推理 Service、InferencePool 或 HTTPRoute。backend 原生接口不满足这一契约时，Operator 注入一个无状态的薄代理来提供它。
 
 P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻辑副本。Controller 通过 backend integration 调用各逻辑副本的 Pod-local LoRA management endpoint；backend 可以由 Leader 协调组内加载，也可以由 integration 向全部成员 fan-out。只有该副本的 Leader 和 Worker 都确认目标 digest 已加载后才计为 Ready。
 
