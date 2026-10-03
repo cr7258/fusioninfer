@@ -353,7 +353,12 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -381,7 +386,12 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000

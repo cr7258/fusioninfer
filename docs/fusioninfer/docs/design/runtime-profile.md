@@ -205,7 +205,7 @@ The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references ar
 
 ### RuntimeProfile: Single-Node Aggregated {#runtimeprofile-single-node-aggregated}
 
-This Profile describes an Aggregated logical replica that uses one GPU.
+This Profile describes an Aggregated logical replica that uses one A10 GPU. Compared with the overview example, it also adds a label to the template, a readiness probe on the `http` port, and CPU and memory requests.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -245,7 +245,7 @@ spec:
 
 ### ClusterRuntimeProfile: Prefill/Decode Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-The Prefiller and Decoder declare their KV transfer roles separately. The Profile does not contain replica counts or an Endpoint Picker policy.
+Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. `VLLM_NIXL_SIDE_CHANNEL_HOST` is set to the Pod IP; otherwise the Decoder cannot reach the Prefiller across Pods. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts and the Endpoint Picker strategy are set in the InferenceDeployment.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -262,8 +262,15 @@ spec:
             image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSIONINFER_MODEL_PATH)
+              - --tensor-parallel-size
+              - "2"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -281,7 +288,12 @@ spec:
             args:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -292,7 +304,7 @@ spec:
           accelerator: h100
 ```
 
-### RuntimeProfile: Multinode Aggregated {#runtimeprofile-multinode-aggregated}
+### RuntimeProfile: vLLM Multinode Aggregated {#runtimeprofile-multinode-aggregated}
 
 Each logical replica consists of one Leader Pod and three Worker Pods, using four nodes in total.
 
@@ -314,8 +326,6 @@ spec:
             image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSIONINFER_MODEL_PATH)
-              - --port
-              - "8000"
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -334,9 +344,54 @@ spec:
 
 Based on `backend: vllm` and `nodeCount: 4`, the Controller injects the multiprocessing executor, node count, address, and rank for the Leader and Workers. It preserves the `TP=8`, `PP=4`, and `DP=1` values fixed in the Profile, so the user maintains only one set of vLLM arguments and one PodTemplate.
 
+### RuntimeProfile: SGLang Multinode Aggregated {#runtimeprofile-sglang-multinode-aggregated}
+
+This Profile runs an Aggregated logical replica across two nodes with SGLang. Each Pod uses eight GPUs, and `--tp-size 16` spans both nodes. SGLang listens on `127.0.0.1:30000` by default, so the template sets `--host 0.0.0.0` and `--port 8000` to match the `http` port.
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: sglang-aggregated-2node-r1
+  namespace: team-a
+spec:
+  backend: sglang
+  aggregated:
+    multinode:
+      nodeCount: 2
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --tp-size
+              - "16"
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "8"
+        nodeSelector:
+          accelerator: h100
+```
+
+Based on `backend: sglang` and `nodeCount: 2`, the Controller adds `--dist-init-addr`, `--nnodes`, and `--node-rank` to each Pod and keeps the other arguments as the template declares them. See [Workload Orchestration: SGLang](./workload-orchestration.md#sglang) for details.
+
 ### RuntimeProfile: Dynamic LoRA {#runtimeprofile-dynamic-lora}
 
-This Profile loads LoRAs in `dynamic` mode. vLLM's LoRA enablement and backend-specific capacity are fixed in the PodTemplate. The `InferenceDeployment` Controller configures the protected Pod-local management endpoint and the environment variables required for runtime updates, and reconciles loading state through the backend integration.
+This Profile loads LoRAs in `dynamic` mode. `--enable-lora`, `--max-loras` and `--max-cpu-loras` in the template turn on LoRA support in vLLM and set its capacity; the Controller sets `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM and then calls its API to load and unload LoRAs.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

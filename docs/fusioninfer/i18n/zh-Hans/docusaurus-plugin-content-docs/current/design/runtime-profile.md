@@ -205,7 +205,7 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 ### RuntimeProfile：单节点 Aggregated {#runtimeprofile-single-node-aggregated}
 
-该 Profile 描述一个使用单张 GPU 的 Aggregated 逻辑副本。
+该 Profile 描述一个使用单张 A10 GPU 的 Aggregated 逻辑副本。和概述中的示例相比，它还给模板加了 label、基于 `http` 端口的 readiness probe，以及 CPU 和内存的 requests。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -245,7 +245,7 @@ spec:
 
 ### ClusterRuntimeProfile：Prefill/Decode 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 分别声明 KV 传输角色。Profile 不包含副本数或 Endpoint Picker 策略。
+Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。`VLLM_NIXL_SIDE_CHANNEL_HOST` 设为 Pod IP，否则跨 Pod 时 Decoder 连不上 Prefiller。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数和 Endpoint Picker 策略在 InferenceDeployment 中设置。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -262,8 +262,15 @@ spec:
             image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSIONINFER_MODEL_PATH)
+              - --tensor-parallel-size
+              - "2"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -281,7 +288,12 @@ spec:
             args:
               - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+            env:
+              - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
             ports:
               - name: http
                 containerPort: 8000
@@ -292,7 +304,7 @@ spec:
           accelerator: h100
 ```
 
-### RuntimeProfile：多节点 Aggregated {#runtimeprofile-multinode-aggregated}
+### RuntimeProfile：vLLM 多节点 Aggregated {#runtimeprofile-multinode-aggregated}
 
 每个逻辑副本由一个 Leader Pod 和三个 Worker Pod 组成，共使用四个节点。
 
@@ -314,8 +326,6 @@ spec:
             image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSIONINFER_MODEL_PATH)
-              - --port
-              - "8000"
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -334,9 +344,54 @@ spec:
 
 Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注入 multiprocessing executor、节点数、地址和 rank。它保留 Profile 中固定的 `TP=8`、`PP=4` 和 `DP=1`，用户只维护一份 vLLM 参数和 Pod 模板。
 
+### RuntimeProfile：SGLang 多节点 Aggregated {#runtimeprofile-sglang-multinode-aggregated}
+
+该 Profile 用 SGLang 运行跨两个节点的 Aggregated 逻辑副本，每个 Pod 使用八张 GPU，`--tp-size 16` 横跨两个节点。SGLang 默认只监听 `127.0.0.1:30000`，所以模板要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: sglang-aggregated-2node-r1
+  namespace: team-a
+spec:
+  backend: sglang
+  aggregated:
+    multinode:
+      nodeCount: 2
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --tp-size
+              - "16"
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "8"
+        nodeSelector:
+          accelerator: h100
+```
+
+Controller 根据 `backend: sglang` 和 `nodeCount: 2` 为每个 Pod 加上 `--dist-init-addr`、`--nnodes` 和 `--node-rank`，其余参数保持模板中的写法，具体见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
+
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 
-该 Profile 以 `dynamic` 方式加载 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量固定在 Pod 模板中；`InferenceDeployment` Controller 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，并通过 backend integration 调和加载状态。
+该 Profile 以 `dynamic` 方式加载 LoRA。模板中的 `--enable-lora`、`--max-loras` 和 `--max-cpu-loras` 开启 vLLM 的 LoRA 支持并设置容量；Controller 会为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`，再调用它的接口加载和卸载 LoRA。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
