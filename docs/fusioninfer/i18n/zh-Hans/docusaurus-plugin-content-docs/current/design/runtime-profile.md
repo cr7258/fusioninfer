@@ -205,7 +205,7 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 ### RuntimeProfile：单节点 Aggregated {#runtimeprofile-single-node-aggregated}
 
-该 Profile 描述一个使用单张 A10 GPU 的 Aggregated 逻辑副本。和概述中的示例相比，它还给模板加了 label、基于 `http` 端口的 readiness probe，以及 CPU 和内存的 requests。
+该 Profile 描述一个使用单张 A10 GPU 的 Aggregated 逻辑副本，模板中设置了 label、基于 `http` 端口的 readiness probe，以及 CPU 和内存的 requests。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

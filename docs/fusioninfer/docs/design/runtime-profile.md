@@ -205,7 +205,7 @@ The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references ar
 
 ### RuntimeProfile: Single-Node Aggregated {#runtimeprofile-single-node-aggregated}
 
-This Profile describes an Aggregated logical replica that uses one A10 GPU. Compared with the overview example, it also adds a label to the template, a readiness probe on the `http` port, and CPU and memory requests.
+This Profile describes an Aggregated logical replica that uses one A10 GPU, with a template label, a readiness probe on the `http` port, and CPU and memory requests.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
