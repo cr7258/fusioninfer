@@ -5,7 +5,7 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 
 ## Overview {#overview}
 
-`RuntimeProfile` and `ClusterRuntimeProfile` declare reusable inference runtime templates, including the inference engine (`backend`), the inference image and startup arguments, how LoRA adapters are loaded, single-node or multinode deployment, and the Aggregated or Prefill/Decode roles. They differ only in scope:
+`RuntimeProfile` and `ClusterRuntimeProfile` declare reusable inference runtime templates, including the inference engine (`backend`), the inference image and startup arguments, how LoRA adapters are loaded, single-node or multinode deployment, the Aggregated or Prefill/Decode roles, and the default Endpoint Picker strategy. They differ only in scope:
 
 - `RuntimeProfile` is a namespaced resource that can be reused within a Namespace.
 - `ClusterRuntimeProfile` is a cluster-scoped resource that can be shared across Namespaces.
@@ -53,11 +53,12 @@ const (
 
 // RuntimeProfileSpec declares a reusable inference runtime, and is shared by RuntimeProfile and ClusterRuntimeProfile.
 type RuntimeProfileSpec struct {
-    Backend    RuntimeBackend        `json:"backend"`
-    LoRA       *RuntimeLoRASpec       `json:"lora,omitempty"`
-    Aggregated *RuntimeComponentSpec `json:"aggregated,omitempty"`
-    Prefiller  *RuntimeComponentSpec `json:"prefiller,omitempty"`
-    Decoder    *RuntimeComponentSpec `json:"decoder,omitempty"`
+    Backend        RuntimeBackend        `json:"backend"`
+    LoRA           *RuntimeLoRASpec      `json:"lora,omitempty"`
+    EndpointPicker *EndpointPickerSpec   `json:"endpointPicker,omitempty"`
+    Aggregated     *RuntimeComponentSpec `json:"aggregated,omitempty"`
+    Prefiller      *RuntimeComponentSpec `json:"prefiller,omitempty"`
+    Decoder        *RuntimeComponentSpec `json:"decoder,omitempty"`
 }
 
 // LoRALoadingMode is when the runtime loads the LoRA adapters bound to it.
@@ -72,6 +73,13 @@ const (
 // RuntimeLoRASpec declares how the runtime loads the LoRA adapters that an InferenceDeployment binds.
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
+}
+
+// EndpointPickerSpec declares how the Endpoint Picker spreads requests among the logical replicas. InferenceDeployment uses the same type.
+type EndpointPickerSpec struct {
+    // Reuses the existing v1alpha1 RoutingStrategy type and allows only these three values.
+    // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
+    Strategy RoutingStrategy `json:"strategy"`
 }
 
 // RuntimeComponentSpec declares one role: the Pod template of a logical replica and whether the replica spans several nodes.
@@ -167,6 +175,30 @@ spec:
 ```
 
 `lora` sits at the top level of the Profile, so all roles use the same loading mode. See [InferenceDeployment: LoRA Bindings](./inference-deployment.md#lora-bindings) for how LoRAs are loaded and unloaded.
+
+### Endpoint Picker Strategy {#endpoint-picker-strategy}
+
+`spec.endpointPicker.strategy` declares the default Endpoint Picker strategy of the InferenceDeployments that use the Profile, which decides how requests are spread among the logical replicas:
+
+| Strategy | Description |
+| --- | --- |
+| `prefix-cache` | Routes requests with the longest shared prefix to the same replica, while balancing KV cache utilization and queue depth |
+| `kv-cache-utilization` | Balances load by the KV cache usage of each replica |
+| `queue-size` | Routes requests to the least loaded replica to shorten waiting time |
+
+The following example sets the default strategy to `prefix-cache`:
+
+```yaml
+spec:
+  backend: vllm
+  endpointPicker:
+    strategy: prefix-cache
+  aggregated:
+    podTemplate:
+      # omitted
+```
+
+An InferenceDeployment can override this default with `spec.endpoint.endpointPicker`; when neither sets it, the default strategy configured for FusionInfer applies. Only an Aggregated Profile can set this field; for a P/D deployment, the Controller generates the scheduling configuration from the Prefiller and Decoder.
 
 ### PodTemplate {#podtemplate}
 

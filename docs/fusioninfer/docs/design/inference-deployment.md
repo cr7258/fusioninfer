@@ -86,7 +86,7 @@ type EndpointSpec struct {
 }
 
 type EndpointPickerSpec struct {
-    // Reuses the existing v1alpha1 RoutingStrategy type.
+    // Shared with RuntimeProfile; reuses the existing v1alpha1 RoutingStrategy type.
     // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
     Strategy RoutingStrategy `json:"strategy"`
 }
@@ -183,7 +183,7 @@ The `gatewayRef` API Group is fixed to `gateway.networking.k8s.io` and its Kind 
 `endpointPicker` applies only to Aggregated deployments:
 
 - It supports `prefix-cache`, `kv-cache-utilization`, and `queue-size`.
-- When omitted, it uses the default strategy configured for FusionInfer.
+- When omitted, it uses `endpointPicker` from the RuntimeProfile; when the Profile does not set it either, the default strategy configured for FusionInfer applies.
 - P/D deployments must omit this field; the Controller automatically generates Prefill and Decode scheduling configuration from `prefiller + decoder`.
 
 The Endpoint Picker image, replica count, and port are managed by the FusionInfer configuration and are not part of the RuntimeProfile or InferenceDeployment user interface.

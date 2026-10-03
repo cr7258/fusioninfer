@@ -17222,6 +17222,29 @@ spec:
                 required:
                 - podTemplate
                 type: object
+              endpointPicker:
+                description: |-
+                  EndpointPicker declares the default Endpoint Picker of the InferenceDeployments that use this
+                  runtime; an InferenceDeployment can override it. Only an aggregated runtime can set it.
+                properties:
+                  strategy:
+                    allOf:
+                    - enum:
+                      - prefix-cache
+                      - kv-cache-utilization
+                      - queue-size
+                      - lora-affinity
+                      - pd-disaggregation
+                    - enum:
+                      - prefix-cache
+                      - kv-cache-utilization
+                      - queue-size
+                    description: Strategy is the routing strategy of the Endpoint
+                      Picker.
+                    type: string
+                required:
+                - strategy
+                type: object
               lora:
                 description: |-
                   LoRA declares that the runtime can serve LoRA adapters and how it loads them.
@@ -25836,6 +25859,8 @@ spec:
               rule: '!has(self.aggregated) || (!has(self.prefiller) && !has(self.decoder))'
             - message: prefiller and decoder must be set together
               rule: has(self.prefiller) == has(self.decoder)
+            - message: endpointPicker can be set only with aggregated
+              rule: '!has(self.endpointPicker) || has(self.aggregated)'
         required:
         - spec
         type: object

@@ -37,6 +37,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1alpha1.ClusterRuntimeProfileApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ComponentStatus"):
 		return &corev1alpha1.ComponentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("EndpointPickerSpec"):
+		return &corev1alpha1.EndpointPickerSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceService"):
 		return &corev1alpha1.InferenceServiceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceServiceSpec"):

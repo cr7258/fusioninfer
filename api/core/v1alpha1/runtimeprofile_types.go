@@ -47,12 +47,13 @@ const (
 )
 
 // RuntimeProfileSpec declares a reusable inference runtime: the backend, the LoRA loading
-// capability, and either an aggregated role or a prefiller and a decoder. It describes one
+// capability, the default Endpoint Picker, and either an aggregated role or a prefiller and a decoder. It describes one
 // logical replica per role and neither sets replica counts nor references a Model.
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 // +kubebuilder:validation:XValidation:rule="has(self.aggregated) || has(self.prefiller) || has(self.decoder)",message="set aggregated, or prefiller and decoder"
 // +kubebuilder:validation:XValidation:rule="!has(self.aggregated) || (!has(self.prefiller) && !has(self.decoder))",message="aggregated cannot be combined with prefiller or decoder"
 // +kubebuilder:validation:XValidation:rule="has(self.prefiller) == has(self.decoder)",message="prefiller and decoder must be set together"
+// +kubebuilder:validation:XValidation:rule="!has(self.endpointPicker) || has(self.aggregated)",message="endpointPicker can be set only with aggregated"
 type RuntimeProfileSpec struct {
 	// Backend selects the inference engine adapter. All roles use the same backend.
 	// +required
@@ -62,6 +63,11 @@ type RuntimeProfileSpec struct {
 	// When omitted, the runtime does not accept LoRA bindings.
 	// +optional
 	LoRA *RuntimeLoRASpec `json:"lora,omitempty"`
+
+	// EndpointPicker declares the default Endpoint Picker of the InferenceDeployments that use this
+	// runtime; an InferenceDeployment can override it. Only an aggregated runtime can set it.
+	// +optional
+	EndpointPicker *EndpointPickerSpec `json:"endpointPicker,omitempty"`
 
 	// Aggregated declares the role of aggregated inference, where each replica runs both prefill and decode.
 	// +optional
@@ -82,6 +88,14 @@ type RuntimeLoRASpec struct {
 	// LoadingMode is when the runtime loads the adapters.
 	// +required
 	LoadingMode LoRALoadingMode `json:"loadingMode"`
+}
+
+// EndpointPickerSpec declares how the Endpoint Picker spreads requests among the logical replicas.
+type EndpointPickerSpec struct {
+	// Strategy is the routing strategy of the Endpoint Picker.
+	// +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
+	// +required
+	Strategy RoutingStrategy `json:"strategy"`
 }
 
 // RuntimeComponentSpec declares one role of a runtime: the Pod template of a logical replica and,

@@ -86,7 +86,7 @@ type EndpointSpec struct {
 }
 
 type EndpointPickerSpec struct {
-    // 复用现有的 v1alpha1 RoutingStrategy 类型。
+    // 与 RuntimeProfile 共用；复用现有的 v1alpha1 RoutingStrategy 类型。
     // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
     Strategy RoutingStrategy `json:"strategy"`
 }
@@ -183,7 +183,7 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 `endpointPicker` 只用于 Aggregated 部署：
 
 - 支持 `prefix-cache`、`kv-cache-utilization` 和 `queue-size`。
-- 省略时使用 FusionInfer 配置的默认策略。
+- 省略时使用 RuntimeProfile 中的 `endpointPicker`；Profile 也没有设置时，使用 FusionInfer 配置的默认策略。
 - P/D 部署必须省略该字段；Controller 根据 `prefiller + decoder` 自动生成 Prefill 和 Decode 调度配置。
 
 Endpoint Picker 的镜像、副本数和端口由 FusionInfer 的配置管理，不属于 RuntimeProfile 或 InferenceDeployment 的用户接口。

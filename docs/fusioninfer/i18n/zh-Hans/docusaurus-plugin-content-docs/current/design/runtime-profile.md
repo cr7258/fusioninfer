@@ -5,7 +5,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 ## 概述 {#overview}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署，以及 Aggregated 或 Prefill/Decode 角色。两者只有作用范围不同：
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署、Aggregated 或 Prefill/Decode 角色，以及默认的 Endpoint Picker 策略。两者只有作用范围不同：
 
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
@@ -53,11 +53,12 @@ const (
 
 // RuntimeProfileSpec 声明可复用的推理运行时，由 RuntimeProfile 与 ClusterRuntimeProfile 共用。
 type RuntimeProfileSpec struct {
-    Backend    RuntimeBackend        `json:"backend"`
-    LoRA       *RuntimeLoRASpec       `json:"lora,omitempty"`
-    Aggregated *RuntimeComponentSpec `json:"aggregated,omitempty"`
-    Prefiller  *RuntimeComponentSpec `json:"prefiller,omitempty"`
-    Decoder    *RuntimeComponentSpec `json:"decoder,omitempty"`
+    Backend        RuntimeBackend        `json:"backend"`
+    LoRA           *RuntimeLoRASpec      `json:"lora,omitempty"`
+    EndpointPicker *EndpointPickerSpec   `json:"endpointPicker,omitempty"`
+    Aggregated     *RuntimeComponentSpec `json:"aggregated,omitempty"`
+    Prefiller      *RuntimeComponentSpec `json:"prefiller,omitempty"`
+    Decoder        *RuntimeComponentSpec `json:"decoder,omitempty"`
 }
 
 // LoRALoadingMode 表示运行时在什么时候加载绑定的 LoRA 适配器。
@@ -72,6 +73,13 @@ const (
 // RuntimeLoRASpec 声明运行时如何加载 InferenceDeployment 绑定的 LoRA 适配器。
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
+}
+
+// EndpointPickerSpec 声明 Endpoint Picker 如何在逻辑副本之间分配请求，InferenceDeployment 也使用这个类型。
+type EndpointPickerSpec struct {
+    // 复用现有的 v1alpha1 RoutingStrategy 类型，只允许以下三种取值。
+    // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
+    Strategy RoutingStrategy `json:"strategy"`
 }
 
 // RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
@@ -167,6 +175,30 @@ spec:
 ```
 
 `lora` 位于 Profile 顶层，所有角色使用同一种加载方式。LoRA 的加载和卸载流程见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
+
+### Endpoint Picker 策略 {#endpoint-picker-strategy}
+
+`spec.endpointPicker.strategy` 声明使用该 Profile 的 InferenceDeployment 默认采用的 Endpoint Picker 策略，决定请求在多个逻辑副本之间怎么分配：
+
+| 策略 | 说明 |
+| --- | --- |
+| `prefix-cache` | 把共享前缀最长的请求发到同一个副本，同时兼顾 KV cache 利用率和排队长度 |
+| `kv-cache-utilization` | 按各副本的 KV cache 占用均衡负载 |
+| `queue-size` | 把请求发到负载最低的副本，缩短排队时间 |
+
+下面的示例把默认策略设为 `prefix-cache`：
+
+```yaml
+spec:
+  backend: vllm
+  endpointPicker:
+    strategy: prefix-cache
+  aggregated:
+    podTemplate:
+      # 省略
+```
+
+InferenceDeployment 可以用 `spec.endpoint.endpointPicker` 覆盖这个默认值；两边都没有设置时，使用 FusionInfer 配置的默认策略。只有 Aggregated 的 Profile 可以设置这个字段，P/D 部署的调度配置由 Controller 根据 Prefiller 和 Decoder 自动生成。
 
 ### Pod 模板 {#podtemplate}
 

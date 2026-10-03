@@ -25,7 +25,7 @@ import (
 // with apply.
 //
 // RuntimeProfileSpec declares a reusable inference runtime: the backend, the LoRA loading
-// capability, and either an aggregated role or a prefiller and a decoder. It describes one
+// capability, the default Endpoint Picker, and either an aggregated role or a prefiller and a decoder. It describes one
 // logical replica per role and neither sets replica counts nor references a Model.
 type RuntimeProfileSpecApplyConfiguration struct {
 	// Backend selects the inference engine adapter. All roles use the same backend.
@@ -33,6 +33,9 @@ type RuntimeProfileSpecApplyConfiguration struct {
 	// LoRA declares that the runtime can serve LoRA adapters and how it loads them.
 	// When omitted, the runtime does not accept LoRA bindings.
 	LoRA *RuntimeLoRASpecApplyConfiguration `json:"lora,omitempty"`
+	// EndpointPicker declares the default Endpoint Picker of the InferenceDeployments that use this
+	// runtime; an InferenceDeployment can override it. Only an aggregated runtime can set it.
+	EndpointPicker *EndpointPickerSpecApplyConfiguration `json:"endpointPicker,omitempty"`
 	// Aggregated declares the role of aggregated inference, where each replica runs both prefill and decode.
 	Aggregated *RuntimeComponentSpecApplyConfiguration `json:"aggregated,omitempty"`
 	// Prefiller declares the prefill role of Prefill/Decode disaggregation.
@@ -60,6 +63,14 @@ func (b *RuntimeProfileSpecApplyConfiguration) WithBackend(value corev1alpha1.Ru
 // If called multiple times, the LoRA field is set to the value of the last call.
 func (b *RuntimeProfileSpecApplyConfiguration) WithLoRA(value *RuntimeLoRASpecApplyConfiguration) *RuntimeProfileSpecApplyConfiguration {
 	b.LoRA = value
+	return b
+}
+
+// WithEndpointPicker sets the EndpointPicker field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the EndpointPicker field is set to the value of the last call.
+func (b *RuntimeProfileSpecApplyConfiguration) WithEndpointPicker(value *EndpointPickerSpecApplyConfiguration) *RuntimeProfileSpecApplyConfiguration {
+	b.EndpointPicker = value
 	return b
 }
 

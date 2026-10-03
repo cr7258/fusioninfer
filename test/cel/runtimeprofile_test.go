@@ -38,6 +38,7 @@ const (
 	msgAggregatedAndPD = "aggregated cannot be combined with prefiller or decoder"
 	msgPDTogether      = "prefiller and decoder must be set together"
 	msgImmutableSpec   = "spec is immutable"
+	msgPickerAggregate = "endpointPicker can be set only with aggregated"
 )
 
 // runtimeProfileObject returns a RuntimeProfile in the default namespace or a cluster-scoped
@@ -120,6 +121,14 @@ func withLoRA(
 	return spec
 }
 
+// withEndpointPicker returns spec with the given default Endpoint Picker strategy.
+func withEndpointPicker(
+	spec fusioninferiov1alpha1.RuntimeProfileSpec, strategy fusioninferiov1alpha1.RoutingStrategy,
+) fusioninferiov1alpha1.RuntimeProfileSpec {
+	spec.EndpointPicker = &fusioninferiov1alpha1.EndpointPickerSpec{Strategy: strategy}
+	return spec
+}
+
 // TestRuntimeProfileAcceptsSupportedRuntimes checks the valid combinations of backend, roles,
 // multinode and LoRA loading.
 func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
@@ -144,6 +153,8 @@ func TestRuntimeProfileAcceptsSupportedRuntimes(t *testing.T) {
 			withLoRA(aggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModePreload)},
 		{"dynamic LoRA", "profile-lora-dynamic",
 			withLoRA(disaggregatedSpec(), fusioninferiov1alpha1.LoRALoadingModeDynamic)},
+		{"endpoint picker", "profile-endpoint-picker",
+			withEndpointPicker(aggregatedSpec(), fusioninferiov1alpha1.StrategyPrefixCache)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -179,12 +190,32 @@ func TestRuntimeProfileRejectsInvalidRoles(t *testing.T) {
 			Prefiller:  engineRole(vllmImage),
 			Decoder:    engineRole(vllmImage),
 		}, msgAggregatedAndPD},
+		{"endpoint picker with prefiller and decoder", "bad-roles-endpoint-picker",
+			withEndpointPicker(disaggregatedSpec(), fusioninferiov1alpha1.StrategyPrefixCache), msgPickerAggregate},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
 			object := runtimeProfileObject("RuntimeProfile", tt.name, tt.spec)
 			expectInvalid(t, k8sClient.Create(t.Context(), object), tt.message)
+		})
+	}
+}
+
+// TestRuntimeProfileLimitsEndpointPickerStrategies checks that endpointPicker accepts only the
+// strategies of an aggregated deployment, although RoutingStrategy also has lora-affinity and
+// pd-disaggregation.
+func TestRuntimeProfileLimitsEndpointPickerStrategies(t *testing.T) {
+	t.Parallel()
+	for _, strategy := range []fusioninferiov1alpha1.RoutingStrategy{
+		fusioninferiov1alpha1.StrategyLoRAffinity,
+		fusioninferiov1alpha1.StrategyPDDisaggregation,
+	} {
+		t.Run(string(strategy), func(t *testing.T) {
+			t.Parallel()
+			object := runtimeProfileObject("RuntimeProfile", "bad-picker-"+string(strategy),
+				withEndpointPicker(aggregatedSpec(), strategy))
+			expectInvalid(t, k8sClient.Create(t.Context(), object), fmt.Sprintf("Unsupported value: %q", strategy))
 		})
 	}
 }
@@ -242,6 +273,11 @@ func TestRuntimeProfileSpecIsImmutable(t *testing.T) {
 				{"lora", func(object client.Object) {
 					profileSpecOf(object).LoRA = &fusioninferiov1alpha1.RuntimeLoRASpec{
 						LoadingMode: fusioninferiov1alpha1.LoRALoadingModeDynamic,
+					}
+				}},
+				{"endpointPicker", func(object client.Object) {
+					profileSpecOf(object).EndpointPicker = &fusioninferiov1alpha1.EndpointPickerSpec{
+						Strategy: fusioninferiov1alpha1.StrategyQueueSize,
 					}
 				}},
 				{"multinode", func(object client.Object) {

@@ -8,6 +8,8 @@ metadata:
   namespace: default
 spec:
   backend: vllm
+  endpointPicker:
+    strategy: prefix-cache
   aggregated:
     podTemplate:
       spec:
