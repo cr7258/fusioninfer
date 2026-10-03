@@ -199,7 +199,7 @@ The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references ar
 
 ## Status {#status}
 
-`RuntimeProfile` and `ClusterRuntimeProfile` do not provide a status subresource and do not require a dedicated Controller. Admission validates constraints within the object, while the consuming `InferenceDeployment.status` holds the state of Namespaced dependencies and the actual runtime.
+`RuntimeProfile` and `ClusterRuntimeProfile` have no status subresource and no Controller of their own: the API server rejects errors in the Profile itself when it is created or updated, and the InferenceDeployment that uses the Profile reports in its status whether the referenced objects exist and how the workload is running.
 
 ## Examples {#examples}
 

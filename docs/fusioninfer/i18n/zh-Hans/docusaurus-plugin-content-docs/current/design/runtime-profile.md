@@ -199,7 +199,7 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 ## Status {#status}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 不提供 status subresource，也不需要独立 Controller。对象内约束由 Admission 校验，Namespace 依赖和实际运行状态由消费它的 `InferenceDeployment.status` 持有。
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 没有 status subresource，也没有自己的 Controller：Profile 本身的错误在创建或更新时就会被 API server 拒绝；引用的对象是否存在、工作负载的运行状态，由使用它的 InferenceDeployment 在 status 中报告。
 
 ## 示例 {#examples}
 
