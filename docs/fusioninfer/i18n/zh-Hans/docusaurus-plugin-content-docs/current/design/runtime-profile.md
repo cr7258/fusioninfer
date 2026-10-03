@@ -242,7 +242,7 @@ spec:
 
 ### ClusterRuntimeProfile：Prefill/Decode 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。`VLLM_NIXL_SIDE_CHANNEL_HOST` 设为 Pod IP，否则跨 Pod 时 Decoder 连不上 Prefiller。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数和 Endpoint Picker 策略在 InferenceDeployment 中设置。
+Prefiller 和 Decoder 都通过 NixlConnector 传输 KV cache，两边的 `kv_role` 都是 `kv_both`。`VLLM_NIXL_SIDE_CHANNEL_HOST` 设为 Pod IP，否则跨 Pod 时 Decoder 连不上 Prefiller。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

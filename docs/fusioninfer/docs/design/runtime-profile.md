@@ -242,7 +242,7 @@ spec:
 
 ### ClusterRuntimeProfile: Prefill/Decode Disaggregation {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. `VLLM_NIXL_SIDE_CHANNEL_HOST` is set to the Pod IP; otherwise the Decoder cannot reach the Prefiller across Pods. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts and the Endpoint Picker strategy are set in the InferenceDeployment.
+Both roles transfer the KV cache through NixlConnector, with `kv_role` set to `kv_both` on each side. `VLLM_NIXL_SIDE_CHANNEL_HOST` is set to the Pod IP; otherwise the Decoder cannot reach the Prefiller across Pods. The Prefiller uses two GPUs (TP=2) and the Decoder uses one. Replica counts are set in the InferenceDeployment; a P/D deployment does not choose an Endpoint Picker strategy, because the Controller generates the scheduling configuration from the Prefiller and Decoder.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
