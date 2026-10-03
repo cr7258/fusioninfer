@@ -183,7 +183,7 @@ Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声
 | Volume | `fusioninfer-model`、`fusioninfer-model-metadata`、`fusioninfer-lora` | 挂载上面的目录和文件 |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
-LoRA 相关的内容只在 InferenceDeployment 声明了 LoRA 绑定时注入；`dynamic` 模式还会注入加载和卸载 LoRA 所需的管理端口和环境变量。
+`FUSION_LORA_ROOT`、`FUSION_LORA_MANIFEST` 和 `fusioninfer-lora` 只在 InferenceDeployment 声明了 LoRA 绑定时注入。`dynamic` 模式下，Operator 还会开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`。
 
 ### 作用域与引用 {#scope-and-references}
 

@@ -183,7 +183,7 @@ The Operator injects the following into the generated Pods, and the template can
 | Volume | `fusioninfer-model`, `fusioninfer-model-metadata`, `fusioninfer-lora` | Mount the directories and files above |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
 
-The LoRA entries are injected only when the InferenceDeployment declares LoRA bindings; `dynamic` mode also injects the management port and environment variables for loading and unloading LoRAs.
+`FUSION_LORA_ROOT`, `FUSION_LORA_MANIFEST` and `fusioninfer-lora` are injected only when the InferenceDeployment declares LoRA bindings. In `dynamic` mode, the Operator also turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM.
 
 ### Scope and References {#scope-and-references}
 
