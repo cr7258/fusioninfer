@@ -181,7 +181,10 @@ Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再�
 | Volume | `fusioninfer-lora` | 只读挂载 LoRA 目录 `/adapters`，只包含当前 Deployment 绑定的 LoRA |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
-`fusioninfer-lora` 只在 InferenceDeployment 声明了 LoRA 绑定时注入。`preload` 模式下，Controller 把 LoRA 写进推理引擎的启动参数，例如 vLLM 的 `--lora-modules`；`dynamic` 模式下，Controller 开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`。
+InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lora`，并按加载方式把 LoRA 交给推理引擎：
+
+- `preload`：把每个 LoRA 的 `servedName` 和路径写进启动参数，例如 vLLM 的 `--lora-modules`，推理引擎启动时加载。
+- `dynamic`：开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`；Pod 运行后，Controller 调用这个接口加载和卸载 LoRA。
 
 ### 作用域与引用 {#scope-and-references}
 

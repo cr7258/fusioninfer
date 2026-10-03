@@ -181,7 +181,10 @@ The Controller injects the following into the generated Pods. A template that de
 | Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` read-only, with only the LoRAs bound to the current Deployment |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
 
-`fusioninfer-lora` is injected only when the InferenceDeployment declares LoRA bindings. In `preload` mode, the Controller adds the LoRAs to the inference engine arguments, such as vLLM's `--lora-modules`; in `dynamic` mode, it turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM.
+The Controller injects `fusioninfer-lora` only when the InferenceDeployment binds LoRAs, and hands the LoRAs to the inference engine according to the loading mode:
+
+- `preload`: it writes each LoRA's `servedName` and path into the startup arguments, such as vLLM's `--lora-modules`, and the inference engine loads them at startup.
+- `dynamic`: it turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM; once the Pod is running, the Controller calls that API to load and unload LoRAs.
 
 ### Scope and References {#scope-and-references}
 
