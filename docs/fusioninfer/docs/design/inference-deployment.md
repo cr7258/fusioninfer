@@ -134,7 +134,7 @@ After resolving a LoRA, the Controller must confirm that its `baseModelRef` and 
 
 The referenced RuntimeProfile must declare `spec.lora`:
 
-- `loadingMode: preload`: The Controller materializes all LoRAs before creating a workload revision and passes the binding manifest to the backend startup integration. Adding, deleting, or replacing a binding creates a new workload revision.
+- `loadingMode: preload`: The Controller materializes all LoRAs before creating a workload revision and adds them to the inference engine arguments for the backend. Adding, deleting, or replacing a binding creates a new workload revision.
 - `loadingMode: dynamic`: The Controller reconciles loading and unloading against the existing Base Model workload without restarting it. Adding, deleting, or replacing a binding updates only the LoRA binding revision. The Pod-local LoRA management endpoint performs only idempotent load, unload, and list operations, and its port is not added to the inference Service, InferencePool, or HTTPRoute. If the backend's native interface does not meet this contract, the Operator injects a thin stateless proxy that provides it.
 
 In P/D mode, each binding must be loaded into every Prefiller and Decoder logical replica. Through the backend integration, the Controller calls the Pod-local LoRA management endpoint of each logical replica; the backend can have the Leader coordinate loading within the group, or the integration can fan out to all members. A replica counts as Ready only after its Leader and all Workers confirm that the target digest is loaded.
@@ -216,7 +216,7 @@ After a reference is resolved successfully, Status records the target object's K
 - Compatibility between the RuntimeProfile roles and the Deployment replica combination is validated after reference resolution.
 - When `lora` is declared, the referenced RuntimeProfile must declare `spec.lora`.
 - The Controller must confirm that every binding references a LoRA Model and that its `baseModelRef` and the Deployment's Base Model reference resolve to the same UID.
-- The current Operator version must support the image and entrypoint arguments in the RuntimeProfile template, and the template cannot declare the distributed parameters that the Controller injects for the backend. Otherwise, the Controller does not create new workloads and sets `ReferencesResolved=False`.
+- The current Operator version must support the image and entrypoint arguments in the RuntimeProfile template, and the template cannot declare the parameters that the Controller injects for the backend. Otherwise, the Controller does not create new workloads and sets `ReferencesResolved=False`.
 - `InferenceDeployment.spec` can be updated. Changes to the Model, Runtime, cache mode, or Endpoint Picker strategy create a new revision pending promotion. Whether a LoRA change rebuilds the workload is determined by the RuntimeProfile's `loadingMode`.
 
 Constraints that do not require reading other objects are validated by CRD OpenAPI, CEL, or Admission. Whether references exist, roles match, Secret/PVC resources are available, and the Gateway accepts the Route is reconciled by the Controller and reported through Conditions, so resources can be created in any order.

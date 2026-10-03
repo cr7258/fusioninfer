@@ -40,7 +40,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -126,7 +126,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -256,7 +256,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -289,7 +289,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -345,7 +345,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -371,7 +371,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -616,7 +616,7 @@ Leader 使用：
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \
@@ -628,7 +628,7 @@ Worker 使用相同的推理引擎参数，只替换 rank：
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \

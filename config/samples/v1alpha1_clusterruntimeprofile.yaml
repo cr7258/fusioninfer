@@ -14,7 +14,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
             ports:
@@ -30,7 +30,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
             ports:

@@ -80,7 +80,7 @@ func engineRole(image string) *fusioninferiov1alpha1.RuntimeComponentSpec {
 				Containers: []corev1.Container{{
 					Name:  "engine",
 					Image: image,
-					Args:  []string{"$(FUSION_MODEL_PATH)"},
+					Args:  []string{"$(FUSIONINFER_MODEL_PATH)"},
 					Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8000}},
 				}},
 			},

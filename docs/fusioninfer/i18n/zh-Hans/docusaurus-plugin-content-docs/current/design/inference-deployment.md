@@ -134,7 +134,7 @@ Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `mod
 
 引用的 RuntimeProfile 必须声明 `spec.lora`：
 
-- `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并把绑定清单交给 backend 的启动集成。增加、删除或替换绑定会创建新的 workload revision。
+- `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并按 backend 把它们写进推理引擎的启动参数。增加、删除或替换绑定会创建新的 workload revision。
 - `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。Pod-local LoRA management endpoint 只执行幂等的 load、unload 和 list，其端口不加入推理 Service、InferencePool 或 HTTPRoute。backend 原生接口不满足这一契约时，Operator 注入一个无状态的薄代理来提供它。
 
 P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻辑副本。Controller 通过 backend integration 调用各逻辑副本的 Pod-local LoRA management endpoint；backend 可以由 Leader 协调组内加载，也可以由 integration 向全部成员 fan-out。只有该副本的 Leader 和 Worker 都确认目标 digest 已加载后才计为 Ready。
@@ -216,7 +216,7 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 - RuntimeProfile 角色与 Deployment 副本组合的一致性在引用解析后校验。
 - 声明 `lora` 时，引用的 RuntimeProfile 必须声明 `spec.lora`。
 - Controller 必须确认每个绑定引用 LoRA Model，并且其 `baseModelRef` 与 Deployment 的 Base Model 引用解析到相同 UID。
-- 当前 Operator 版本必须支持 RuntimeProfile 模板中的镜像和入口参数，模板也不能声明 Controller 按 backend 注入的分布式参数；否则 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
+- 当前 Operator 版本必须支持 RuntimeProfile 模板中的镜像和入口参数，模板也不能声明 Controller 按 backend 注入的参数；否则 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
 - `InferenceDeployment.spec` 可以更新；Model、Runtime、缓存模式或 Endpoint Picker 策略变化会产生新的待提升 revision。LoRA 变化是否重建 workload 由 RuntimeProfile 的 `loadingMode` 决定。
 
 不需要读取其他对象的约束由 CRD OpenAPI、CEL 或 Admission 校验。引用是否存在、角色是否一致、Secret/PVC 是否可用以及 Gateway 是否接受 Route，由 Controller 调和并通过 Conditions 报告，因此资源可以按任意顺序创建。

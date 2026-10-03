@@ -12,7 +12,7 @@ description: Define reusable runtime templates for aggregated, Prefill/Decode-di
 
 `RuntimeProfile` and `ClusterRuntimeProfile` use the same `RuntimeProfileSpec`. A Profile describes one logical replica per role; it neither specifies deployment replica counts nor binds to a specific Model.
 
-The following is an example of an Aggregated RuntimeProfile. It uses the vLLM inference engine. The `engine` container in the Pod template runs the vLLM image, reads the model from `$(FUSION_MODEL_PATH)`, which the Operator injects, and serves inference on port 8000, named `http`:
+The following is an example of an Aggregated RuntimeProfile. It uses the vLLM inference engine. The `engine` container in the Pod template runs the vLLM image, reads the model from `$(FUSIONINFER_MODEL_PATH)`, which the Operator injects, and serves inference on port 8000, named `http`:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -29,7 +29,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -160,7 +160,7 @@ spec:
         containers:
           - name: engine
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --enable-lora
               - --max-loras
               - "8"
@@ -176,16 +176,12 @@ The Operator injects the following into the generated Pods, and the template can
 
 | Type | Name | Description |
 | --- | --- | --- |
-| Environment variable | `FUSION_MODEL_PATH` | The Model directory `/models`, mounted read-only. Startup commands should read the Model through `$(FUSION_MODEL_PATH)` |
-| Environment variable | `FUSION_MODEL_METADATA_PATH` | The Model metadata file `/var/run/fusioninfer/model/model.json` |
-| Environment variable | `FUSION_LORA_ROOT` | The LoRA directory `/adapters`, mounted read-only, with only the LoRAs bound to the current Deployment |
-| Environment variable | `FUSION_LORA_MANIFEST` | The LoRA manifest `/var/run/fusioninfer/lora/adapters.json`, which maps each `servedName` to its LoRA path |
-| Volume | `fusioninfer-model` | Mounts the Model directory `/models` |
-| Volume | `fusioninfer-model-metadata` | Mounts the Model metadata file `model.json` |
-| Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` |
+| Environment variable | `FUSIONINFER_MODEL_PATH` | Set to the Model directory `/models`. Startup commands should read the Model through `$(FUSIONINFER_MODEL_PATH)` |
+| Volume | `fusioninfer-model` | Mounts the Model directory `/models` read-only |
+| Volume | `fusioninfer-lora` | Mounts the LoRA directory `/adapters` read-only, with only the LoRAs bound to the current Deployment |
 | Init container | `fusioninfer-model-init` | Checks the node's Model cache and downloads the Model on a miss |
 
-`FUSION_LORA_ROOT`, `FUSION_LORA_MANIFEST` and `fusioninfer-lora` are injected only when the InferenceDeployment declares LoRA bindings. In `dynamic` mode, the Operator also turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM.
+`fusioninfer-lora` is injected only when the InferenceDeployment declares LoRA bindings. In `preload` mode, the Controller adds the LoRAs to the inference engine arguments, such as vLLM's `--lora-modules`; in `dynamic` mode, it turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM.
 
 ### Scope and References {#scope-and-references}
 
@@ -214,7 +210,7 @@ The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets
 - The template's `schedulerName` must be empty or equal to the Volcano scheduler configured by the Operator.
 - The template cannot use Operator-reserved volumes, init containers, environment variables, mount paths, labels, or annotations.
 - The current Operator version must support the image and entrypoint arguments declared in the template.
-- The template cannot declare the executor, address, rank, `nnodes`, or headless parameters that the Controller injects for the backend.
+- The template cannot declare the executor, address, rank, `nnodes`, headless, or LoRA list parameters that the Controller injects for the backend.
 - The template image must be pinned by OCI digest. For readability, the examples in this document use version tags.
 - `RuntimeProfile.spec` and `ClusterRuntimeProfile.spec` are immutable. Changing the backend, image, command, resources, `multinode`, or PodTemplate requires a new object.
 
@@ -246,7 +242,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -282,7 +278,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
             ports:
@@ -300,7 +296,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
             ports:
@@ -334,7 +330,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -376,7 +372,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --enable-lora
               - --max-loras
               - "8"

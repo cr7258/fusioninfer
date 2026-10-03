@@ -12,7 +12,7 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 `RuntimeProfile` 和 `ClusterRuntimeProfile` 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。
 
-下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Operator 注入的 `$(FUSION_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务：
+下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Operator 注入的 `$(FUSIONINFER_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -29,7 +29,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -160,7 +160,7 @@ spec:
         containers:
           - name: engine
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --enable-lora
               - --max-loras
               - "8"
@@ -176,16 +176,12 @@ Operator 会在生成的 Pod 中自动注入以下内容，模板中不能再声
 
 | 类型 | 名称 | 说明 |
 | --- | --- | --- |
-| 环境变量 | `FUSION_MODEL_PATH` | 模型目录 `/models`，只读挂载。启动命令应通过 `$(FUSION_MODEL_PATH)` 读取模型 |
-| 环境变量 | `FUSION_MODEL_METADATA_PATH` | 模型元数据文件 `/var/run/fusioninfer/model/model.json` |
-| 环境变量 | `FUSION_LORA_ROOT` | LoRA 目录 `/adapters`，只读挂载，只包含当前 Deployment 绑定的 LoRA |
-| 环境变量 | `FUSION_LORA_MANIFEST` | LoRA 清单 `/var/run/fusioninfer/lora/adapters.json`，记录每个 `servedName` 对应的 LoRA 路径 |
-| Volume | `fusioninfer-model` | 挂载模型目录 `/models` |
-| Volume | `fusioninfer-model-metadata` | 挂载模型元数据文件 `model.json` |
-| Volume | `fusioninfer-lora` | 挂载 LoRA 目录 `/adapters` |
+| 环境变量 | `FUSIONINFER_MODEL_PATH` | 值为模型目录 `/models`。启动命令应通过 `$(FUSIONINFER_MODEL_PATH)` 读取模型 |
+| Volume | `fusioninfer-model` | 只读挂载模型目录 `/models` |
+| Volume | `fusioninfer-lora` | 只读挂载 LoRA 目录 `/adapters`，只包含当前 Deployment 绑定的 LoRA |
 | Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
-`FUSION_LORA_ROOT`、`FUSION_LORA_MANIFEST` 和 `fusioninfer-lora` 只在 InferenceDeployment 声明了 LoRA 绑定时注入。`dynamic` 模式下，Operator 还会开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`。
+`fusioninfer-lora` 只在 InferenceDeployment 声明了 LoRA 绑定时注入。`preload` 模式下，Controller 把 LoRA 写进推理引擎的启动参数，例如 vLLM 的 `--lora-modules`；`dynamic` 模式下，Controller 开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`。
 
 ### 作用域与引用 {#scope-and-references}
 
@@ -214,7 +210,7 @@ Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap �
 - 模板中的 `schedulerName` 必须为空或等于 Operator 配置的 Volcano scheduler。
 - 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
 - 当前 Operator 版本必须支持模板中声明的镜像和入口参数。
-- 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes` 或 headless 参数。
+- 模板不能声明 Controller 按 backend 注入的 executor、地址、rank、`nnodes`、headless 参数或 LoRA 列表。
 - 模板镜像必须使用 OCI digest 固定。本文示例为了便于阅读使用版本 tag。
 - `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
 
@@ -246,7 +242,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -282,7 +278,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
             ports:
@@ -300,7 +296,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
               - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
             ports:
@@ -334,7 +330,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -376,7 +372,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --enable-lora
               - --max-loras
               - "8"
