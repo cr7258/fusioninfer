@@ -195,18 +195,7 @@ The Controller injects `fusioninfer-lora` only when the InferenceDeployment bind
 
 - `dynamic`: it turns on the runtime LoRA API of the inference engine, for example by setting `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM; once the Pod is running, the Controller calls that API to load and unload LoRAs.
 
-### Scope and References {#scope-and-references}
-
-`RuntimeProfile` does not contain a `modelRef`. The specific Model, runtime template, and replica counts are bound by `InferenceDeployment`.
-
-A PodTemplate can reference a ServiceAccount, Secret, ConfigMap, and PVC:
-
-- Namespaced dependencies in a `RuntimeProfile` are resolved in the Profile's Namespace.
-- Namespaced dependency names in a `ClusterRuntimeProfile` are resolved in the Namespace of the `InferenceDeployment` that consumes it.
-- A `ClusterRuntimeProfile` cannot pin dependencies in another Namespace.
-- When a `ClusterRuntimeProfile` is created, only the reference structure is validated. The consumer reconciles whether each dependency exists and reports the result through `InferenceDeployment.status`.
-
-The Profile neither owns nor modifies these dependencies. ConfigMaps and Secrets that affect startup behavior should use immutable objects or versioned names.
+The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references are looked up in the Namespace of the InferenceDeployment that uses it. They are not checked when the Profile is created; a missing one is reported in the InferenceDeployment status.
 
 ### Defaults and Validation {#defaults-and-validation}
 

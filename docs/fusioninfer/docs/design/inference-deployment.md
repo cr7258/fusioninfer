@@ -195,7 +195,7 @@ The Endpoint Picker image, replica count, and port are managed by the FusionInfe
 - When referencing a `Model` or `RuntimeProfile`, lookup is limited to the Deployment's Namespace.
 - When referencing a `ClusterModel` or `ClusterRuntimeProfile`, lookup is limited to Cluster-scoped objects.
 - Namespaced references cannot specify or access another Namespace.
-- ClusterModel credentials and Namespaced dependencies in a ClusterRuntimeProfile are resolved in the Deployment's Namespace.
+- Namespaced dependencies in a ClusterRuntimeProfile are resolved in the Deployment's Namespace; ClusterModel credentials are resolved in the FusionInfer system Namespace, see [Model and ClusterModel: Access credentials](./model.md#access-credentials).
 
 Whether a cross-Namespace Gateway accepts the generated HTTPRoute is determined by the Gateway listener's `allowedRoutes`. FusionInfer does not modify the Gateway or try another object with the same name after reference resolution fails.
 

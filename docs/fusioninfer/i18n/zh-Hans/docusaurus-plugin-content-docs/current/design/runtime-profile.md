@@ -195,18 +195,7 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 - `dynamic`：开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`；Pod 运行后，Controller 调用这个接口加载和卸载 LoRA。
 
-### 作用域与引用 {#scope-and-references}
-
-`RuntimeProfile` 自身不包含 `modelRef`。具体 Model、运行模板和副本数由 `InferenceDeployment` 绑定。
-
-Pod 模板可以引用 ServiceAccount、Secret、ConfigMap 和 PVC：
-
-- `RuntimeProfile` 中的 Namespaced 依赖在 Profile 所在 Namespace 中解析。
-- `ClusterRuntimeProfile` 中的 Namespaced 依赖名称在消费它的 `InferenceDeployment` Namespace 中解析。
-- `ClusterRuntimeProfile` 不能固定其他 Namespace 中的依赖。
-- 创建 `ClusterRuntimeProfile` 时只校验引用结构；依赖是否存在由消费方调和并通过 `InferenceDeployment.status` 报告。
-
-Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap 和 Secret 应使用 immutable 对象或版本化名称。
+模板引用的 ServiceAccount、Secret、ConfigMap 和 PVC 都在使用它的 InferenceDeployment 所在的 Namespace 中查找。创建 Profile 时不检查它们是否存在，缺失时由 InferenceDeployment 的 status 报告。
 
 ### 默认值与校验 {#defaults-and-validation}
 

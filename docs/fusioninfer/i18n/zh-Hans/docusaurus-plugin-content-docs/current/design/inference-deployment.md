@@ -195,7 +195,7 @@ Endpoint Picker 的镜像、副本数和端口由 FusionInfer 的配置管理，
 - 引用 `Model` 或 `RuntimeProfile` 时，只在 Deployment 所在 Namespace 查找。
 - 引用 `ClusterModel` 或 `ClusterRuntimeProfile` 时，只查找 Cluster-scoped 对象。
 - Namespaced 引用不能指定或访问其他 Namespace。
-- ClusterModel 的凭据和 ClusterRuntimeProfile 中的 Namespaced 依赖都在 Deployment 所在 Namespace 解析。
+- ClusterRuntimeProfile 中的 Namespaced 依赖在 Deployment 所在 Namespace 解析；ClusterModel 的凭据在 FusionInfer 的系统 Namespace 中解析，见 [Model 与 ClusterModel：访问凭据](./model.md#access-credentials)。
 
 跨 Namespace Gateway 是否接受生成的 HTTPRoute，由 Gateway listener 的 `allowedRoutes` 决定。FusionInfer 不修改 Gateway，也不会在引用失败后尝试其他同名对象。
 
