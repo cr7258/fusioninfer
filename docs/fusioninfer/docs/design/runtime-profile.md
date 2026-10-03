@@ -238,7 +238,7 @@ The ServiceAccount, Secrets, ConfigMaps and PVCs that the template references ar
 
 ### RuntimeProfile: Single-Node Aggregated {#runtimeprofile-single-node-aggregated}
 
-This Profile describes an Aggregated logical replica that uses one A10 GPU, with a readiness probe on the `http` port and CPU and memory requests.
+The following example runs an Aggregated logical replica on one A10 GPU:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -437,7 +437,7 @@ Based on `backend: vllm` and `nodeCount: 4`, the Controller injects the multipro
 
 ### RuntimeProfile: SGLang Multinode Aggregated {#runtimeprofile-sglang-multinode-aggregated}
 
-This Profile runs an Aggregated logical replica across two nodes with SGLang. Each Pod uses eight GPUs, and `--tp-size 16` spans both nodes. SGLang listens on `127.0.0.1:30000` by default, so the template sets `--host 0.0.0.0` and `--port 8000` to match the `http` port.
+The following example runs an Aggregated logical replica across two nodes with SGLang. Each Pod uses eight GPUs, and `--tp-size 16` spans both nodes. SGLang listens on `127.0.0.1:30000` by default, so the template sets `--host 0.0.0.0` and `--port 8000` to match the `http` port.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -482,7 +482,7 @@ Based on `backend: sglang` and `nodeCount: 2`, the Controller adds `--dist-init-
 
 ### RuntimeProfile: Dynamic LoRA {#runtimeprofile-dynamic-lora}
 
-This Profile loads LoRAs in `dynamic` mode. `--enable-lora`, `--max-loras` and `--max-cpu-loras` in the template turn on LoRA support in vLLM and set its capacity; the Controller sets `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM and then calls its API to load and unload LoRAs.
+The following example loads LoRAs in `dynamic` mode. `--enable-lora`, `--max-loras` and `--max-cpu-loras` in the template turn on LoRA support in vLLM and set its capacity; the Controller sets `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true` for vLLM and then calls its API to load and unload LoRAs.
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

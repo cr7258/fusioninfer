@@ -238,7 +238,7 @@ InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lo
 
 ### RuntimeProfile：单节点 Aggregated {#runtimeprofile-single-node-aggregated}
 
-该 Profile 描述一个使用单张 A10 GPU 的 Aggregated 逻辑副本，模板中设置了基于 `http` 端口的 readiness probe，以及 CPU 和内存的 requests。
+下面的例子在单张 A10 GPU 上运行一个 Aggregated 逻辑副本：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -437,7 +437,7 @@ Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注�
 
 ### RuntimeProfile：SGLang 多节点 Aggregated {#runtimeprofile-sglang-multinode-aggregated}
 
-该 Profile 用 SGLang 运行跨两个节点的 Aggregated 逻辑副本，每个 Pod 使用八张 GPU，`--tp-size 16` 横跨两个节点。SGLang 默认只监听 `127.0.0.1:30000`，所以模板要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+下面的例子用 SGLang 运行跨两个节点的 Aggregated 逻辑副本，每个 Pod 使用八张 GPU，`--tp-size 16` 横跨两个节点。SGLang 默认只监听 `127.0.0.1:30000`，所以模板要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -482,7 +482,7 @@ Controller 根据 `backend: sglang` 和 `nodeCount: 2` 为每个 Pod 加上 `--d
 
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 
-该 Profile 以 `dynamic` 方式加载 LoRA。模板中的 `--enable-lora`、`--max-loras` 和 `--max-cpu-loras` 开启 vLLM 的 LoRA 支持并设置容量；Controller 会为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`，再调用它的接口加载和卸载 LoRA。
+下面的例子以 `dynamic` 方式加载 LoRA。模板中的 `--enable-lora`、`--max-loras` 和 `--max-cpu-loras` 开启 vLLM 的 LoRA 支持并设置容量；Controller 会为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`，再调用它的接口加载和卸载 LoRA。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
